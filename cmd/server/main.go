@@ -21,6 +21,27 @@ func main() {
 	slog.SetDefault(logger);
 	slog.Info("tobira starting", "node", *nodeID, "port", *port)
 
+	ctx, stop:= signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 	
-	
+	srv:= api.NewServer(*nodeID, *port)
+
+	go func() {
+		if err:= srv.Start(); err!=nil {
+			slog.Error("server error", "err", err)
+			os.Exit(1)
+		}
+	}()
+
+	slog.Info("tobira ready", "addr", fmt.Sprintf("http://localhost:%s", *port))
+
+	<-ctx.Done()
+	slog.Info("shutting down :[ ")
+
+	if err:=srv.Shutdown(); err!=nil{
+		slog.Error("shutdown error", "err", err)
+		os.Exit(1)
+	}
+
+	slog.Info("tobira stopped, gate closed :D ");
 }
