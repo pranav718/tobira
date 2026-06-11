@@ -21,7 +21,7 @@ func NewServer(nodeID, port string) *Server {
 	s.registerRoutes(mux)
 
 	s.httpServer = &http.Server { 
-		Addr: fmt.Sprintf("%s", port),
+		Addr: fmt.Sprintf(":%s", port),
 		Handler: mux, 
 		ReadTimeout: 5* time.Second,
 		WriteTimeout: 10* time.Second, 
@@ -41,7 +41,7 @@ func (s *Server) Start() error {
 }
 
 func (s *Server) Shutdown() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10+time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	return s.httpServer.Shutdown(ctx)
 }
