@@ -10,21 +10,26 @@ import (
 	"syscall"
 
 	"github.com/pranav718/tobira/internal/api"
+	"github.com/pranav718/tobira/internal/limiter"
 )
 
 func main() {
 	port:= flag.String("port", "8080", "HTTP server port")
 	nodeID:= flag.String("id", "node-1", "unique node identifier")
+	rate := flag.Int("rate", 10 ,"max reqs per window")
+	window:= flag.Int("window", 60, "rate limiter window in seconds")
 	flag.Parse()
 
 	logger:= slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{ Level: slog.LevelDebug}))
 	slog.SetDefault(logger);
-	slog.Info("tobira starting", "node", *nodeID, "port", *port)
+	slog.Info("tobira starting", "node", *nodeID, "port", *port, "rate", *rate, "window", *window)
 
 	ctx, stop:= signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	lim:= limiter.NewFixedWindow(limiter.Config{ Rate: *rate, WindowSeconds: *window})
 	
-	srv:= api.NewServer(*nodeID, *port)
+	srv:= api.NewServer(*nodeID, *port, lim)
 
 	go func() {
 		if err:= srv.Start(); err!=nil {
