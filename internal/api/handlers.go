@@ -34,3 +34,35 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(resp)
 }
+
+type LimitResponse struct {
+	Allowed bool `json:"allowed"`
+	Node string `json:"node"`
+	Key string `json:"key"`
+	Timestamp string `json:"timestamp"`
+}
+
+func (s *Server) handleResource(w http.ResponseWriter, r *http.Request){
+	key:= r.RemoteAddr
+
+	allowed := s.limiter.Allow(key)
+
+	resp:= LimitResponse{
+		Allowed: allowed, 
+		Node: s.nodeID,
+		Key: key,
+		Timestamp: time.Now().Format(time.RFC3339),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	if !allowed{
+		w.WriteHeader(http.StatusTooManyRequests)
+		json.NewEncoder(w).Encode(resp)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(resp)
+	
+}
