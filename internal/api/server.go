@@ -6,16 +6,19 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/pranav718/tobira/internal/limiter"
 )
 
 type Server struct {
 	nodeID string
 	port string
 	httpServer *http.Server
+	limiter limiter.Limiter
 }
 
-func NewServer(nodeID, port string) *Server {
-	s:= &Server{ nodeID: nodeID, port: port}
+func NewServer(nodeID, port string, l limiter.Limiter) *Server {
+	s:= &Server{ nodeID: nodeID, port: port, limiter: l}
 
 	mux:= http.NewServeMux()
 	s.registerRoutes(mux)
