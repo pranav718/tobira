@@ -9,6 +9,7 @@ import (
 
 func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /health", s.handleHealth)
+	mux.HandleFunc("GET /api/resource", s.handleResource)
 }
 
 type HealthResponse struct {
