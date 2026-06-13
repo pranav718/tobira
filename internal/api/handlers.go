@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"log/slog"
+	"net"
 	"net/http"
 	"time"
 )
@@ -44,7 +45,11 @@ type LimitResponse struct {
 }
 
 func (s *Server) handleResource(w http.ResponseWriter, r *http.Request){
-	key:= r.RemoteAddr
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	key := host
 
 	allowed := s.limiter.Allow(key)
 
