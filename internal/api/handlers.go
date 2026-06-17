@@ -11,6 +11,7 @@ import (
 func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /health", s.handleHealth)
 	mux.HandleFunc("GET /api/resource", s.handleResource)
+	mux.HandleFunc("GET /metrics", s.handleMetrics)
 }
 
 type HealthResponse struct {
@@ -45,6 +46,8 @@ type LimitResponse struct {
 }
 
 func (s *Server) handleResource(w http.ResponseWriter, r *http.Request){
+	start:= time.Now()
+
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		host = r.RemoteAddr
@@ -52,6 +55,8 @@ func (s *Server) handleResource(w http.ResponseWriter, r *http.Request){
 	key := host
 
 	allowed := s.limiter.Allow(key)
+
+	s.metrics.Record(allowed, time.Since(start))
 
 	resp:= LimitResponse{
 		Allowed: allowed, 
@@ -71,4 +76,11 @@ func (s *Server) handleResource(w http.ResponseWriter, r *http.Request){
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(resp)
 	
+}
+
+func(s *Server) handleMetrics(w http.ResponseWriter, r *http.Request){
+	snapshot:= s.metrics.Snapshot()
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(snapshot)
 }

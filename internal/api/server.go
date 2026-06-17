@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/pranav718/tobira/internal/limiter"
+	"github.com/pranav718/tobira/internal/metrics"
 )
 
 type Server struct {
@@ -15,10 +16,11 @@ type Server struct {
 	port string
 	httpServer *http.Server
 	limiter limiter.Limiter
+	metrics  *metrics.Metrics
 }
 
-func NewServer(nodeID, port string, l limiter.Limiter) *Server {
-	s:= &Server{ nodeID: nodeID, port: port, limiter: l}
+func NewServer(nodeID, port string, l limiter.Limiter, m *metrics.Metrics) *Server {
+	s:= &Server{ nodeID: nodeID, port: port, limiter: l, metrics: m}
 
 	mux:= http.NewServeMux()
 	s.registerRoutes(mux)
