@@ -16,13 +16,13 @@ func New(cfg Config) (Limiter, error) {
 	switch cfg.Algorithm{
 	case "fixed_window":
 		return NewFixedWindow(cfg), nil
-	case "sliding_window"
+	case "sliding_window":
 		return NewSlidingWindow(cfg), nil
 	case "token_bucket":
 		return NewTokenBucket(cfg), nil
 	case "leaky_bucket":
 		return NewLeakyBucket(cfg), nil
 	default:
-		return nil, fmt.Error("unknown algorithm: %s", cfg.Algorithm)	
+		return nil, fmt.Errorf("unknown algorithm: %s", cfg.Algorithm)	
 	}
 }

@@ -52,3 +52,13 @@ func (m *Metrics) Snapshot() Snapshot {
 		AverageLatencyMs: avgLatency,
 	}
 }
+
+func (m *Metrics) Reset() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.requestsTotal = 0
+	m.allowedTotal = 0
+	m.deniedTotal = 0
+	m.totalLatency = 0
+}
