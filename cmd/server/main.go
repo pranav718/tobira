@@ -1,16 +1,18 @@
 package main
 
 import (
-	"fmt"
 	"context"
 	"flag"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/pranav718/tobira/internal/api"
+	"github.com/pranav718/tobira/internal/gossip"
 	"github.com/pranav718/tobira/internal/limiter"
 	"github.com/pranav718/tobira/internal/metrics"
 )
@@ -22,11 +24,12 @@ func main() {
 	window:= flag.Int("window", 60, "rate limiter window in seconds")
 	algorithm:= flag.String("algorithm","fixed_window","rate limit algorithm: fixed_window, sliding_window, token_bucket, leaky_bucket")
 	metricsReset := flag.Int("metrics-reset", 10, "metrics reset interval in seconds( 0 to disable)")
+	peers := flag.String("peers", "", "comma-separated list of peer addresses (e.g. localhost:8081,localhost:8082)")
 	flag.Parse()
 
 	logger:= slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{ Level: slog.LevelDebug}))
 	slog.SetDefault(logger);
-	slog.Info("tobira starting", "node", *nodeID, "port", *port, "rate", *rate, "window", *window, "metrics_reset", *metricsReset)
+	slog.Info("tobira starting", "node", *nodeID, "port", *port, "rate", *rate, "window", *window, "metrics_reset", *metricsReset, "peers", *peers)
 
 	ctx, stop:= signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -61,7 +64,14 @@ func main() {
 		}()
 	}
 
-	srv := api.NewServer(*nodeID, *port, lim, met)
+	var peerList []string
+	if *peers != "" {
+		peerList = strings.Split(*peers, ",")
+	}
+	selfAddr := fmt.Sprintf("localhost:%s", *port)
+	gossipNode := gossip.NewNode(*nodeID, selfAddr, peerList)
+
+	srv := api.NewServer(*nodeID, *port, lim, met, gossipNode)
 
 	go func() {
 		if err := srv.Start(); err != nil {
