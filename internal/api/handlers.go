@@ -12,6 +12,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /health", s.handleHealth)
 	mux.HandleFunc("GET /api/resource", s.handleResource)
 	mux.HandleFunc("GET /metrics", s.handleMetrics)
+	mux.HandleFunc("GET /api/nodes", s.handleNodes)
 }
 
 type HealthResponse struct {
@@ -83,4 +84,11 @@ func(s *Server) handleMetrics(w http.ResponseWriter, r *http.Request){
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(snapshot)
+}
+
+func (s *Server) handleNodes(w http.ResponseWriter, r *http.Request){
+	info:= s.gossipNode.Info()
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(info)
 }
