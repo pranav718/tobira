@@ -37,3 +37,43 @@ func NewTransport(nodeID, httpPort string) (*Transport, error) {
 	}, nil
 }
 
+func (t *Transport) Send(targetHTTPAddr string, msg Message) error {
+	host, portStr, err := net.SplitHostPort(targetHTTPAddr)
+	if err != nil {
+		return fmt.Errorf("invalid target address structure: %v", err)
+	}
+	hPort, err := strconv.Atoi(portStr)
+	if err != nil {
+		return fmt.Errorf("invalid target port: %v", err)
+	}
+	udpPort := hPort + 1000
+	targetUDPAddr := fmt.Sprintf("%s:%d", host, udpPort)
+	udpAddr, err := net.ResolveUDPAddr("udp", targetUDPAddr)
+	if err != nil {
+		return fmt.Errorf("failed to resolve UDP address: %v", err)
+	}
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return fmt.Errorf("failed to marshal message: %v", err)
+	}
+	_, err = t.conn.WriteTo(data, udpAddr)
+	return err
+}
+
+func (t *Transport) Read() (Message, net.Addr, error) {
+	buf := make([]byte, 65535)
+	n, addr, err := t.conn.ReadFrom(buf)
+	if err != nil {
+		return Message{}, nil, err
+	}
+	
+	var msg Message
+	if err := json.Unmarshal(buf[:n], &msg); err != nil {
+		return Message{}, addr, fmt.Errorf("failed to unmarshal message: %v", err)
+	}
+	return msg, addr, nil
+}
+
+func (t *Transport) Close() error {
+	return t.conn.Close()
+}
