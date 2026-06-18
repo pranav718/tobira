@@ -69,7 +69,13 @@ func main() {
 		peerList = strings.Split(*peers, ",")
 	}
 	selfAddr := fmt.Sprintf("localhost:%s", *port)
-	gossipNode := gossip.NewNode(*nodeID, selfAddr, peerList)
+	gossipNode, err := gossip.NewNode(*nodeID, selfAddr, peerList)
+	if err != nil {
+		slog.Error("failed to initialize gossip node", "err", err)
+		os.Exit(1)
+	}
+
+	gossipNode.Start()
 
 	srv := api.NewServer(*nodeID, *port, lim, met, gossipNode)
 
@@ -84,6 +90,10 @@ func main() {
 	
 	<-ctx.Done()
 	slog.Info("shutting down :[")
+
+	if err:= gossipNode.Shutdown(); err!=nil {
+		slog.Error("gossip shutdown error", "err", err)
+	}
 
 	if err := srv.Shutdown(); err != nil {
 		slog.Error("shutdown error", "err", err)
