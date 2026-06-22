@@ -22,9 +22,9 @@ type Node struct {
 }
 
 func NewNode(id, addr string, peers []string) (*Node,error) {
-	_, postStr, err:= net.SplitHostPort(addr)
+	_, portStr, err:= net.SplitHostPort(addr)
 	if err != nil {
-		postStr = "8080"
+		portStr = "8080"
 	}
 
 	transport, err := NewTransport(id, portStr)

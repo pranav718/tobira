@@ -16,7 +16,7 @@ type Message struct {
 
 type Transport struct{
 	conn net.PacketConn
-	nodeId string
+	nodeID string
 }
 
 func NewTransport(nodeID, httpPort string) (*Transport, error) {
