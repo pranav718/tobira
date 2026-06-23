@@ -1,6 +1,7 @@
 package limiter
 
 import (
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -9,15 +10,19 @@ import (
 type SlidingWindow struct {
 	rate int
 	duration time.Duration
+	store CounterStore
+	nodeID string
 	mu sync.Mutex
-	logs map[string][]time.Time
+	localCounts map[string]int64
 }
 
 func NewSlidingWindow(cfg Config) *SlidingWindow {
-	return &SlidingWindow{ 
+	return &SlidingWindow{
 		rate: cfg.Rate,
-		duration: time.Duration(cfg.WindowSeconds) * time.Second, 
-		logs: make(map[string][]time.Time),
+		duration: time.Duration(cfg.WindowSeconds) * time.Second,
+		store: cfg.Store,
+		nodeID: cfg.NodeID,
+		localCounts: make(map[string]int64),
 	}
 }
 
@@ -25,36 +30,36 @@ func (sw *SlidingWindow) Allow(key string) bool {
 	sw.mu.Lock()
 	defer sw.mu.Unlock()
 
-	now:= time.Now()
-	cutoff:= now.Add(-sw.duration)
-
-	entries:= sw.logs[key]
-	valid:= entries[:0]
-
-	for _, t := range entries {
-		if t.After(cutoff){
-			valid = append(valid, t)
-		}
+	now:=time.Now().Unix()
+	windowSeconds := int64(sw.duration.Seconds())
+	if windowSeconds <= 0 {
+		windowSeconds = 1
 	}
 
-	if len(valid) < sw.rate {
-		sw.logs[key] = append(valid, now)
-		slog.Debug("limiter: allowed",
-			"algo", "sliding_window",
+	var globalCount int64
+	for i := int64(0); i < windowSeconds; i++ {
+		sliceKey := fmt.Sprintf("%s:slice:%d", key, now-i)
+		globalCount += sw.store.GetGlobalCount(sliceKey)
+	}
+
+	if globalCount < int64(sw.rate) {
+		currentSliceKey := fmt.Sprintf("%s:slice:%d", key, now)
+		sw.localCounts[currentSliceKey]++
+		sw.store.UpdateLocal(currentSliceKey, sw.nodeID, sw.localCounts[currentSliceKey])
+
+		slog.Debug("limiter: allowed (sliding_window)",
 			"key", key,
-			"count", len(valid)+1,
+			"global_count", globalCount+1,
 			"limit", sw.rate,
-	    )
+		)
 		return true
 	}
 
-	sw.logs[key] = valid
-	slog.Debug("limiter: denied",
-		"algo", "sliding_window",
+	slog.Debug("limiter: denied (sliding_window)",
 		"key", key,
-		"count", len(valid),
+		"global_count", globalCount,
 		"limit", sw.rate,
 	)
 	return false
-
+	
 }

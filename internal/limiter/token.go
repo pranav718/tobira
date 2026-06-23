@@ -1,29 +1,35 @@
 package limiter
 
 import (
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
 )
 
-type bucket struct {
-	tokens float64
-	lastTime time.Time
-}
-
 type TokenBucket struct {
-	capacity float64
-	refillRate float64
-	mu sync.Mutex
-	buckets map[string]*bucket
+	capacity    float64
+	refillRate  float64
+	store       CounterStore
+	nodeID      string
+	mu          sync.Mutex
+	localCounts map[string]int64
+	startedAt   map[string]time.Time
 }
 
-func NewTokenBucket(cfg Config) *TokenBucket{
-	capacity:= float64(cfg.Rate)
+func NewTokenBucket(cfg Config) *TokenBucket {
+	capacity := float64(cfg.Rate)
+	refillRate := capacity / float64(cfg.WindowSeconds)
+	if refillRate <= 0 {
+		refillRate = 1.0
+	}
 	return &TokenBucket{
-		capacity: capacity,
-		refillRate: capacity,
-        buckets: make(map[string]*bucket),
+		capacity:    capacity,
+		refillRate:  refillRate,
+		store:       cfg.Store,
+		nodeID:      cfg.NodeID,
+		localCounts: make(map[string]int64),
+		startedAt:   make(map[string]time.Time),
 	}
 }
 
@@ -31,44 +37,37 @@ func (tb *TokenBucket) Allow(key string) bool {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 
-	now:= time.Now()
-	b, exists:= tb.buckets[key]
+	now := time.Now()
+	start, exists := tb.startedAt[key]
+	if !exists {
+		start = now
+		tb.startedAt[key] = start
+	}
 
-	if !exists{
-		tb.buckets[key] = &bucket{
-			tokens: tb.capacity - 1,
-			lastTime: now,
-		}
-		slog.Debug("limiter: allowed",
-			"algo", "token_bucket",
+	elapsed := now.Sub(start).Seconds()
+
+	// Calculate maximum allowed requests globally
+	maxAllowed := tb.capacity + elapsed*tb.refillRate
+
+	allowedKey := fmt.Sprintf("%s:allowed", key)
+	globalAllowed := tb.store.GetGlobalCount(allowedKey)
+
+	if float64(globalAllowed) < maxAllowed {
+		tb.localCounts[allowedKey]++
+		tb.store.UpdateLocal(allowedKey, tb.nodeID, tb.localCounts[allowedKey])
+
+		slog.Debug("limiter: allowed (token_bucket)",
 			"key", key,
-			"tokens", tb.capacity-1,
+			"global_allowed", globalAllowed+1,
+			"max_allowed", maxAllowed,
 		)
 		return true
 	}
 
-	elapsed:= now.Sub(b.lastTime).Seconds()
-	b.tokens += elapsed * tb.refillRate
-	if b.tokens > tb.capacity{
-		b.tokens = tb.capacity
-	}
-	b.lastTime = now
-
-	if b.tokens >=1 {
-		b.tokens--
-		slog.Debug("limiter: allowed",
-			"algo","token_bucket",
-			"key", key,
-			"tokens", b.tokens,
-		)
-		return true
-	}
-
-	slog.Debug("limiter: denied",
-		"algo", "token_bucket",
+	slog.Debug("limiter: denied (token_bucket)",
 		"key", key,
-		"tokens", b.tokens,
+		"global_allowed", globalAllowed,
+		"max_allowed", maxAllowed,
 	)
-
 	return false
 }

@@ -34,17 +34,6 @@ func main() {
 	ctx, stop:= signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	lim, err := limiter.New(limiter.Config{
-		Algorithm:     *algorithm,
-		Rate:          *rate,
-		WindowSeconds: *window,
-	})
-
-	if err != nil {
-		slog.Error("failed to create limiter", "err", err)
-		os.Exit(1)
-	}
-
 	met:= metrics.NewMetrics()
 
 	if *metricsReset > 0 {
@@ -76,6 +65,19 @@ func main() {
 	}
 
 	gossipNode.Start(ctx)
+
+	lim, err := limiter.New(limiter.Config{
+		Algorithm:     *algorithm,
+		Rate:          *rate,
+		WindowSeconds: *window,
+		Store:         gossipNode.State(),
+		NodeID:        *nodeID,
+	})
+
+	if err != nil {
+		slog.Error("failed to create limiter", "err", err)
+		os.Exit(1)
+	}
 
 	srv := api.NewServer(*nodeID, *port, lim, met, gossipNode)
 

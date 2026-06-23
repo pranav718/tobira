@@ -55,6 +55,10 @@ func NewNode(id, addr string, peers []string) (*Node,error) {
 	}, nil
 }
 
+func (n *Node) State() *State {
+	return n.state
+}
+
 func (n *Node) Start(ctx context.Context) {
 	go n.receiveLoop()
 	go n.startGossipLoop(ctx)
@@ -315,7 +319,7 @@ func (n *Node) Info() NodeInfo {
 		Peers: peersCopy,
 		Health: healthCopy,
 	}
-	
+
 }
 
 func (n *Node) GetPeers() []string {

@@ -6,10 +6,17 @@ type Limiter interface {
 	Allow(key string) bool
 }
 
+type CounterStore interface {
+	UpdateLocal(key, nodeID string, count int64)
+	GetGlobalCount(key string) int64
+}
+
 type Config struct {
 	Algorithm string
 	Rate int
 	WindowSeconds int
+	Store CounterStore
+	NodeID string
 }
 
 func New(cfg Config) (Limiter, error) {
