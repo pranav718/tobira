@@ -75,7 +75,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	gossipNode.Start()
+	gossipNode.Start(ctx)
 
 	srv := api.NewServer(*nodeID, *port, lim, met, gossipNode)
 
