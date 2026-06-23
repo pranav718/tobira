@@ -24,6 +24,11 @@ type peerHealth struct {
 	Status   string    `json:"status"` 
 }
 
+type GossipEvent struct {
+	Type    string      `json:"type"` // "state_merge" or "health_transition"
+	Payload interface{} `json:"payload"`
+}
+
 type Node struct {
 	mu sync.RWMutex
 	id string
@@ -32,6 +37,7 @@ type Node struct {
 	transport *Transport
 	state *State
 	peersHealth map[string]*peerHealth
+	eventChan chan GossipEvent
 }
 
 func NewNode(id, addr string, peers []string) (*Node,error) {
@@ -52,11 +58,16 @@ func NewNode(id, addr string, peers []string) (*Node,error) {
 		transport: transport,
 		state:	NewState(),
 		peersHealth: make(map[string]*peerHealth),
+		eventChan: make(chan GossipEvent, 100),
 	}, nil
 }
 
 func (n *Node) State() *State {
 	return n.state
+}
+
+func (n *Node) Events() <-chan GossipEvent {
+	return n.eventChan
 }
 
 func (n *Node) Start(ctx context.Context) {
@@ -176,7 +187,20 @@ func (n *Node) checkPeerHealth() {
 				"new_status", newStatus,
 				"elapsed_seconds", elapsed.Seconds(),
 			)
+			oldStatus := ph.Status
 			ph.Status = newStatus
+
+			select {
+			case n.eventChan <- GossipEvent{
+				Type: "health_transition",
+				Payload: map[string]interface{}{
+					"peer_id":    peerID,
+					"old_status": oldStatus,
+					"new_status": newStatus,
+				},
+			}:
+			default:
+			}
 		}
 	}
 }
@@ -267,6 +291,13 @@ func (n *Node) receiveLoop() {
 			slog.Info("gossip: received state", "src", srcAddr.String(), "sender", msg.Sender, "state", msg.Payload)
 
 			if changed := n.state.Merge(incoming); changed {
+				select {
+				case n.eventChan <- GossipEvent{
+					Type:    "state_merge",
+					Payload: n.state.Copy(),
+				}:
+				default:
+				}
 				peers := n.GetPeers()
 				var candidates []string
 				for _, p := range peers {

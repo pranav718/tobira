@@ -13,16 +13,18 @@ import (
 )
 
 type Server struct {
-	nodeID string
-	port string
+	nodeID     string
+	port       string
 	httpServer *http.Server
 	limiter limiter.Limiter
 	metrics  *metrics.Metrics
 	gossipNode *gossip.Node
+	wsHub      *Hub
 }
 
 func NewServer(nodeID, port string, l limiter.Limiter, m *metrics.Metrics, gn *gossip.Node) *Server {
 	s:= &Server{ nodeID: nodeID, port: port, limiter: l, metrics: m, gossipNode: gn}
+	s.wsHub = NewHub(nodeID, gn, m)
 
 	mux:= http.NewServeMux()
 	s.registerRoutes(mux)
@@ -38,7 +40,8 @@ func NewServer(nodeID, port string, l limiter.Limiter, m *metrics.Metrics, gn *g
 	
 }
 
-func (s *Server) Start() error {
+func (s *Server) Start(ctx context.Context) error {
+	go s.wsHub.Run(ctx)
 	slog.Info("http server listening", "addr", s.httpServer.Addr)
 	err := s.httpServer.ListenAndServe()
 	if err != nil && err!=http.ErrServerClosed{

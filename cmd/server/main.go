@@ -82,7 +82,7 @@ func main() {
 	srv := api.NewServer(*nodeID, *port, lim, met, gossipNode)
 
 	go func() {
-		if err := srv.Start(); err != nil {
+		if err := srv.Start(ctx); err != nil {
 			slog.Error("server error", "err", err)
 			os.Exit(1)
 		}

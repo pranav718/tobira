@@ -17,6 +17,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/nodes", s.handleNodes)
 	mux.HandleFunc("GET /nodes", s.handleNodes)
 	mux.HandleFunc("GET /api/gossip/send", s.handleGossipSend)
+	mux.HandleFunc("GET /ws", s.wsHub.ServeHTTP)
 }
 
 type HealthResponse struct {
@@ -62,6 +63,12 @@ func (s *Server) handleResource(w http.ResponseWriter, r *http.Request){
 	allowed := s.limiter.Allow(key)
 
 	s.metrics.Record(allowed, time.Since(start))
+
+	s.wsHub.Broadcast("limit", map[string]interface{}{
+		"allowed":   allowed,
+		"key":       key,
+		"timestamp": time.Now().Format(time.RFC3339),
+	})
 
 	resp:= LimitResponse{
 		Allowed: allowed, 
