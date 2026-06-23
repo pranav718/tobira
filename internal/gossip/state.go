@@ -11,7 +11,7 @@ type State struct {
 
 func NewState() *State{
 	return &State {
-		Data: mak(map[string]map[string]int64),
+		Data: make(map[string]map[string]int64),
 	}
 }
 
@@ -24,20 +24,24 @@ func (s *State) UpdateLocal(key, nodeID string, count int64) {
 	s.Data[key][nodeID] = count
 }
 
-func (s *State) Merge(incoming map[string]map[string]int64) {
+func (s *State) Merge(incoming map[string]map[string]int64) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	updated := false
 	for key, nodeCounts := range incoming {
 		if _, exists := s.Data[key]; !exists {
 			s.Data[key] = make(map[string]int64)
+			updated = true
 		}
 		for nodeID, count := range nodeCounts {
 			current := s.Data[key][nodeID]
 			if count > current {
 				s.Data[key][nodeID] = count
+				updated = true
 			}
 		}
 	}
+	return updated
 }
 
 func (s *State) GetGlobalCount(key string) int64 {
