@@ -15,6 +15,7 @@ type NodeInfo struct {
 	ID    string   `json:"id"`
 	Addr  string   `json:"addr"`
 	Peers []string `json:"peers"`
+	Health map[string]*peerHealth `json:"health"`
 }
 
 type peerHealth struct {
@@ -58,6 +59,7 @@ func (n *Node) Start(ctx context.Context) {
 	go n.receiveLoop()
 	go n.startGossipLoop(ctx)
 	go n.startHeartbeatLoop(ctx)
+	go n.startFailureDetector(ctx)
 }
 
 type HeartbeatPayload struct {
@@ -126,6 +128,52 @@ func (n *Node) updatePeerHealth(nodeID, addr string) {
 			Status:   "healthy",
 		}
 		slog.Info("discovered new peer via heartbeat", "id", nodeID, "addr", addr)
+	}
+}
+func (n *Node) startFailureDetector(ctx context.Context) {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	slog.Info("starting periodic failure detector loop")
+
+	for {
+		select {
+		case <-ticker.C:
+			n.checkPeerHealth()
+
+		case <-ctx.Done():
+			slog.Info("failure detector: stopping loop")
+			return
+		}
+	}
+}
+
+func (n *Node) checkPeerHealth() {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	now := time.Now()
+	for peerID, ph := range n.peersHealth {
+		elapsed := now.Sub(ph.LastSeen)
+
+		var newStatus string
+		if elapsed > 10*time.Second {
+			newStatus = "dead"
+		} else if elapsed > 3*time.Second {
+			newStatus = "suspect"
+		} else {
+			newStatus = "healthy"
+		}
+
+		if ph.Status != newStatus {
+			slog.Warn("peer health transition",
+				"id", peerID,
+				"old_status", ph.Status,
+				"new_status", newStatus,
+				"elapsed_seconds", elapsed.Seconds(),
+			)
+			ph.Status = newStatus
+		}
 	}
 }
 
@@ -252,12 +300,22 @@ func (n *Node) Info() NodeInfo {
 	peersCopy := make([]string, len(n.peers))
 	copy(peersCopy, n.peers)
 
+	healthCopy := make(map[string]*peerHealth)
+	for id, ph := range n.peersHealth {
+		healthCopy[id] = &peerHealth{
+			Addr:     ph.Addr,
+			LastSeen: ph.LastSeen,
+			Status:   ph.Status,
+		}
+	}
+
 	return NodeInfo{
 		ID: n.id,
 		Addr: n.addr,
 		Peers: peersCopy,
+		Health: healthCopy,
 	}
-
+	
 }
 
 func (n *Node) GetPeers() []string {

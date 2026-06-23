@@ -15,6 +15,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/resource", s.handleResource)
 	mux.HandleFunc("GET /metrics", s.handleMetrics)
 	mux.HandleFunc("GET /api/nodes", s.handleNodes)
+	mux.HandleFunc("GET /nodes", s.handleNodes)
 	mux.HandleFunc("GET /api/gossip/send", s.handleGossipSend)
 }
 
