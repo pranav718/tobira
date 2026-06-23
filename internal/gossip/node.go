@@ -17,6 +17,12 @@ type NodeInfo struct {
 	Peers []string `json:"peers"`
 }
 
+type peerHealth struct {
+	Addr     string    `json:"addr"`
+	LastSeen time.Time `json:"last_seen"`
+	Status   string    `json:"status"` 
+}
+
 type Node struct {
 	mu sync.RWMutex
 	id string
@@ -24,6 +30,7 @@ type Node struct {
 	peers []string
 	transport *Transport
 	state *State
+	peersHealth map[string]*peerHealth
 }
 
 func NewNode(id, addr string, peers []string) (*Node,error) {
@@ -43,12 +50,83 @@ func NewNode(id, addr string, peers []string) (*Node,error) {
 		peers: peers,
 		transport: transport,
 		state:	NewState(),
+		peersHealth: make(map[string]*peerHealth),
 	}, nil
 }
 
 func (n *Node) Start(ctx context.Context) {
 	go n.receiveLoop()
 	go n.startGossipLoop(ctx)
+	go n.startHeartbeatLoop(ctx)
+}
+
+type HeartbeatPayload struct {
+	Addr      string `json:"addr"`
+	Timestamp int64  `json:"timestamp"`
+}
+
+func (n *Node) startHeartbeatLoop(ctx context.Context) {
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	slog.Info("starting periodic heartbeat loop")
+
+	for {
+		select {
+		case <-ticker.C:
+			peers := n.GetPeers()
+			if len(peers) == 0 {
+				continue
+			}
+
+			payload := HeartbeatPayload{
+				Addr:      n.addr,
+				Timestamp: time.Now().Unix(),
+			}
+			data, err := json.Marshal(payload)
+			if err != nil {
+				slog.Error("heartbeat: failed to marshal payload", "err", err)
+				continue
+			}
+
+			msg := Message{
+				Type:    "heartbeat",
+				Sender:  n.id,
+				Payload: string(data),
+			}
+
+			for _, peer := range peers {
+				if err := n.Send(peer, msg); err != nil {
+					slog.Debug("heartbeat: failed to send to peer", "peer", peer, "err", err)
+				}
+			}
+
+		case <-ctx.Done():
+			slog.Info("heartbeat: stopping loop")
+			return
+		}
+	}
+}
+
+func (n *Node) updatePeerHealth(nodeID, addr string) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	now := time.Now()
+	if ph, exists := n.peersHealth[nodeID]; exists {
+		ph.LastSeen = now
+		ph.Status = "healthy"
+		if ph.Addr == "" && addr != "" {
+			ph.Addr = addr
+		}
+	} else {
+		n.peersHealth[nodeID] = &peerHealth{
+			Addr:     addr,
+			LastSeen: now,
+			Status:   "healthy",
+		}
+		slog.Info("discovered new peer via heartbeat", "id", nodeID, "addr", addr)
+	}
 }
 
 func (n *Node) Shutdown() error {
@@ -118,6 +196,15 @@ func (n *Node) receiveLoop() {
 		}
 
 		switch msg.Type {
+		case "heartbeat":
+			var payload HeartbeatPayload
+			if err := json.Unmarshal([]byte(msg.Payload), &payload); err != nil {
+				slog.Error("heartbeat: failed to unmarshal payload", "err", err)
+				continue
+			}
+			slog.Debug("heartbeat: received", "sender", msg.Sender, "addr", payload.Addr)
+			n.updatePeerHealth(msg.Sender, payload.Addr)
+
 		case "gossip":
 			var incoming map[string]map[string]int64
 			if err := json.Unmarshal([]byte(msg.Payload), &incoming); err != nil {
