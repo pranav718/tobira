@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -46,4 +49,64 @@ func main() {
 	fmt.Printf("rps:      %d\n", cfg.RPS)
 	fmt.Printf("duration: %s\n", cfg.Duration)
 	fmt.Printf("workers:  %d\n", cfg.Workers)
+
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.Duration)
+	defer cancel()
+
+	tasks := make(chan string, cfg.Workers*2)
+
+	var wg sync.WaitGroup
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+	}
+
+	for i := 0; i < cfg.Workers; i++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case url, ok := <-tasks:
+					if !ok {
+						return
+					}
+					req, err := http.NewRequestWithContext(ctx, "get", url, nil)
+					if err != nil {
+						continue
+					}
+					resp, err := client.Do(req)
+					if err != nil {
+						continue
+					}
+					resp.Body.Close()
+				}
+			}
+		}(i)
+	}
+
+	go func() {
+		defer close(tasks)
+		ticker := time.NewTicker(time.Second / time.Duration(cfg.RPS))
+		defer ticker.Stop()
+
+		var requestCount int
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				target := cfg.Targets[requestCount%len(cfg.Targets)]
+				select {
+				case tasks <- target:
+					requestCount++
+				default:
+				}
+			}
+		}
+	}()
+
+	wg.Wait()
+	fmt.Printf("load test finished\n")
 }
