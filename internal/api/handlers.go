@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -18,6 +19,9 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /nodes", s.handleNodes)
 	mux.HandleFunc("GET /api/gossip/send", s.handleGossipSend)
 	mux.HandleFunc("GET /ws", s.wsHub.ServeHTTP)
+	mux.HandleFunc("POST /api/admin/gossip", s.handleAdminGossip)
+	mux.HandleFunc("POST /api/admin/heartbeat", s.handleAdminHeartbeat)
+	mux.HandleFunc("POST /api/admin/shutdown", s.handleAdminShutdown)
 }
 
 type HealthResponse struct {
@@ -126,4 +130,38 @@ func (s *Server) handleNodes(w http.ResponseWriter, r *http.Request){
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("message sent over UDP"))
- }
+}
+
+func (s *Server) handleAdminGossip(w http.ResponseWriter, r *http.Request) {
+	mutedStr := r.URL.Query().Get("muted")
+	muted := mutedStr == "true"
+
+	s.gossipNode.SetMuteGossip(muted)
+	slog.Info("admin: set gossip mute status", "muted", muted, "node", s.nodeID)
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(fmt.Sprintf("gossip muted set to %v", muted)))
+}
+
+func (s *Server) handleAdminHeartbeat(w http.ResponseWriter, r *http.Request) {
+	mutedStr := r.URL.Query().Get("muted")
+	muted := mutedStr == "true"
+
+	s.gossipNode.SetMuteHeartbeats(muted)
+	slog.Info("admin: set heartbeat mute status", "muted", muted, "node", s.nodeID)
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(fmt.Sprintf("heartbeats muted set to %v", muted)))
+}
+
+func (s *Server) handleAdminShutdown(w http.ResponseWriter, r *http.Request) {
+	slog.Warn("admin: triggering node shutdown", "node", s.nodeID)
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("node shutdown initiated"))
+
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		slog.Warn("admin: executing shutdown")
+		s.Shutdown()
+	}()
+}

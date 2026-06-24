@@ -38,6 +38,8 @@ type Node struct {
 	state *State
 	peersHealth map[string]*peerHealth
 	eventChan chan GossipEvent
+	gossipMuted bool
+	heartbeatsMuted bool
 }
 
 func NewNode(id, addr string, peers []string) (*Node,error) {
@@ -59,7 +61,33 @@ func NewNode(id, addr string, peers []string) (*Node,error) {
 		state:	NewState(),
 		peersHealth: make(map[string]*peerHealth),
 		eventChan: make(chan GossipEvent, 100),
+		gossipMuted: false,
+		heartbeatsMuted: false,
 	}, nil
+}
+
+func (n *Node) SetMuteGossip(mute bool) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.gossipMuted = mute
+}
+
+func (n *Node) IsGossipMuted() bool {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+	return n.gossipMuted
+}
+
+func (n *Node) SetMuteHeartbeats(mute bool) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.heartbeatsMuted = mute
+}
+
+func (n *Node) IsHeartbeatsMuted() bool {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+	return n.heartbeatsMuted
 }
 
 func (n *Node) State() *State {
@@ -91,6 +119,9 @@ func (n *Node) startHeartbeatLoop(ctx context.Context) {
 	for {
 		select {
 		case <-ticker.C:
+			if n.IsHeartbeatsMuted() {
+				continue
+			}
 			peers := n.GetPeers()
 			if len(peers) == 0 {
 				continue
@@ -226,6 +257,9 @@ func (n *Node) startGossipLoop(ctx context.Context) {
 	for {
 		select {
 		case <-ticker.C:
+			if n.IsGossipMuted() {
+				continue
+			}
 			peers := n.GetPeers()
 			if len(peers) == 0 {
 				continue
