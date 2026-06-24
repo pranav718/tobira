@@ -54,6 +54,11 @@ func main() {
 	defer cancel()
 
 	tasks := make(chan string, cfg.Workers*2)
+	results := make(chan struct {
+		latency time.Duration
+		status  int
+		err     error
+	}, cfg.Workers*2)
 
 	var wg sync.WaitGroup
 	client := &http.Client{
@@ -72,15 +77,31 @@ func main() {
 					if !ok {
 						return
 					}
+					start := time.Now()
 					req, err := http.NewRequestWithContext(ctx, "get", url, nil)
 					if err != nil {
+						results <- struct {
+							latency time.Duration
+							status  int
+							err     error
+						}{0, -1, err}
 						continue
 					}
 					resp, err := client.Do(req)
 					if err != nil {
+						results <- struct {
+							latency time.Duration
+							status  int
+							err     error
+						}{0, -1, err}
 						continue
 					}
 					resp.Body.Close()
+					results <- struct {
+						latency time.Duration
+						status  int
+						err     error
+					}{time.Since(start), resp.StatusCode, nil}
 				}
 			}
 		}(i)
@@ -107,6 +128,46 @@ func main() {
 		}
 	}()
 
-	wg.Wait()
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	var total, allowed, blocked, failed int
+	var minLat, maxLat, sumLat time.Duration
+
+	for res := range results {
+		total++
+		if res.err != nil || (res.status != 200 && res.status != 429) {
+			failed++
+		} else if res.status == 200 {
+			allowed++
+		} else if res.status == 429 {
+			blocked++
+		}
+
+		if res.latency > 0 {
+			if minLat == 0 || res.latency < minLat {
+				minLat = res.latency
+			}
+			if res.latency > maxLat {
+				maxLat = res.latency
+			}
+			sumLat += res.latency
+		}
+	}
+
+	var avgLat time.Duration
+	if total > 0 {
+		avgLat = sumLat / time.Duration(total)
+	}
+
 	fmt.Printf("load test finished\n")
+	fmt.Printf("total requests: %d\n", total)
+	fmt.Printf("allowed (200):  %d\n", allowed)
+	fmt.Printf("blocked (429):  %d\n", blocked)
+	fmt.Printf("failed:         %d\n", failed)
+	fmt.Printf("min latency:    %v\n", minLat)
+	fmt.Printf("max latency:    %v\n", maxLat)
+	fmt.Printf("avg latency:    %v\n", avgLat)
 }
