@@ -38,17 +38,37 @@ export function TopologyGraph({ cluster, activeNodeId, lastGossipSignal }: Topol
 
 		svg.selectAll("*").remove();
 
-		svg.append("defs").append("marker")
+		const defs = svg.append("defs");
+
+		defs.append("pattern")
+			.attr("id", "dot-grid")
+			.attr("x", 0)
+			.attr("y", 0)
+			.attr("width", 20)
+			.attr("height", 20)
+			.attr("patternUnits", "userSpaceOnUse")
+			.append("circle")
+			.attr("cx", 2)
+			.attr("cy", 2)
+			.attr("r", 1)
+			.attr("fill", "#27272a");
+
+		svg.append("rect")
+			.attr("width", width)
+			.attr("height", height)
+			.attr("fill", "url(#dot-grid)");
+
+		defs.append("marker")
 			.attr("id", "arrow")
 			.attr("viewBox", "0 -5 10 10")
-			.attr("refX", 25) 
+			.attr("refX", 28) 
 			.attr("refY", 0)
 			.attr("markerWidth", 6)
 			.attr("markerHeight", 6)
 			.attr("orient", "auto")
 			.append("path")
 			.attr("d", "M0,-5L10,0L0,5")
-			.attr("fill", "#4b5563");
+			.attr("fill", "#3f3f46");
 
 		const nodesList: GraphNode[] = [];
 		const linksList: GraphLink[] = [];
@@ -116,10 +136,10 @@ export function TopologyGraph({ cluster, activeNodeId, lastGossipSignal }: Topol
 		});
 
 		const simulation = d3.forceSimulation<GraphNode, GraphLink>(nodesList)
-			.force("link", d3.forceLink<GraphNode, GraphLink>(linksList).id((d) => d.id).distance(160))
-			.force("charge", d3.forceManyBody().strength(-400))
+			.force("link", d3.forceLink<GraphNode, GraphLink>(linksList).id((d) => d.id).distance(150))
+			.force("charge", d3.forceManyBody().strength(-500))
 			.force("center", d3.forceCenter(width / 2, height / 2))
-			.force("collision", d3.forceCollide().radius(40));
+			.force("collision", d3.forceCollide().radius(45));
 
 		simulationRef.current = simulation;
 
@@ -129,11 +149,11 @@ export function TopologyGraph({ cluster, activeNodeId, lastGossipSignal }: Topol
 			.data(linksList)
 			.enter()
 			.append("line")
-			.attr("stroke", "#374151")
+			.attr("stroke", "#3f3f46")
 			.attr("stroke-width", 2)
 			.attr("stroke-dasharray", (d) => {
 				const sourceId = typeof d.source === "string" ? d.source : d.source.id;
-				return sourceId === cluster.id ? "none" : "4,4";
+				return sourceId === cluster.id ? "none" : "5,5";
 			}) 
 			.attr("marker-end", "url(#arrow)");
 
@@ -149,56 +169,61 @@ export function TopologyGraph({ cluster, activeNodeId, lastGossipSignal }: Topol
 				.on("end", dragended)
 			);
 
+		const getNodeColor = (d: GraphNode) => {
+			if (d.status === "healthy") return "#10b981"; 
+			if (d.status === "suspect") return "#fbbf24"; 
+			if (d.status === "dead") return "#ef4444";   
+			return "#52525b"; 
+		};
+
 		nodes.append("circle")
-			.attr("r", (d) => d.isLocal ? 26 : 22)
-			.attr("fill", (d) => {
-				if (d.status === "healthy") return "#10b981"; 
-				if (d.status === "suspect") return "#f59e0b"; 
-				if (d.status === "dead") return "#ef4444";   
-				return "#6b7280"; 
-			})
-			.attr("stroke", (d) => d.isLocal ? "#ffffff" : "#1f2937")
-			.attr("stroke-width", (d) => d.isLocal ? 3 : 1.5)
-			.style("cursor", "grab")
-			.style("filter", "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))");
+			.attr("r", (d) => d.isLocal ? 28 : 22)
+			.attr("fill", getNodeColor)
+			.attr("stroke", (d) => d.isLocal ? "#fbbf24" : "#000000")
+			.attr("stroke-width", 3)
+			.style("cursor", "grab");
 
 		nodes.filter((d) => d.isLocal)
 			.append("circle")
-			.attr("r", 26)
+			.attr("r", 34)
 			.attr("fill", "none")
-			.attr("stroke", "#10b981")
-			.attr("stroke-width", 1.5)
+			.attr("stroke", "#fbbf24")
+			.attr("stroke-width", 2)
+			.attr("stroke-dasharray", "4,2")
 			.attr("opacity", 0.8)
 			.transition()
 			.duration(2000)
 			.ease(d3.easeLinear)
 			.on("start", function repeat(this: SVGElement) {
 				d3.select(this)
-					.attr("r", 26)
+					.attr("r", 32)
 					.attr("opacity", 0.8)
 					.transition()
 					.duration(1500)
-					.attr("r", 40)
+					.attr("r", 45)
 					.attr("opacity", 0)
 					.on("end", repeat);
 			});
 
 		nodes.append("text")
 			.attr("dy", ".35em")
-			.attr("y", (d) => d.isLocal ? 40 : 34)
+			.attr("y", (d) => d.isLocal ? 44 : 36)
 			.attr("text-anchor", "middle")
-			.attr("fill", "#f3f4f6")
+			.attr("fill", "#ffffff")
 			.attr("font-size", "12px")
 			.attr("font-weight", "bold")
+			.attr("font-family", "var(--font-space-grotesk), sans-serif")
 			.text((d) => d.id);
 
 		nodes.append("text")
 			.attr("dy", ".35em")
-			.attr("y", (d) => d.isLocal ? 52 : 46)
+			.attr("y", (d) => d.isLocal ? 56 : 48)
 			.attr("text-anchor", "middle")
-			.attr("fill", "#9ca3af")
+			.attr("fill", "#71717a")
 			.attr("font-size", "9px")
-			.text((d) => d.isLocal ? "local node" : d.status);
+			.attr("font-weight", "bold")
+			.attr("font-family", "var(--font-ibm-plex-mono), monospace")
+			.text((d) => d.isLocal ? "local" : d.status.toUpperCase());
 
 		simulation.on("tick", () => {
 			links
@@ -258,12 +283,13 @@ export function TopologyGraph({ cluster, activeNodeId, lastGossipSignal }: Topol
 				.attr("cx", sender.x)
 				.attr("cy", sender.y)
 				.attr("r", 5)
-				.attr("fill", "#3b82f6") 
-				.style("filter", "drop-shadow(0px 0px 4px #60a5fa)");
+				.attr("fill", "#fbbf24") 
+				.attr("stroke", "#000000")
+				.attr("stroke-width", 1.5);
 
 			particle.transition()
-				.duration(1000)
-				.ease(d3.easeQuadOut)
+				.duration(800)
+				.ease(d3.easeCubicOut)
 				.attr("cx", target.x)
 				.attr("cy", target.y)
 				.on("end", () => {
@@ -276,43 +302,46 @@ export function TopologyGraph({ cluster, activeNodeId, lastGossipSignal }: Topol
 						})
 						.transition()
 						.duration(100)
-						.attr("stroke", "#60a5fa")
+						.attr("stroke", "#fbbf24")
 						.attr("stroke-width", 5)
 						.transition()
 						.duration(300)
-						.attr("stroke", "#ffffff")
+						.attr("stroke", "#fbbf24")
 						.attr("stroke-width", 3);
 				});
 		}
 	}, [lastGossipSignal]);
 
 	return (
-		<div className="relative w-full h-full min-h-[400px] bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden shadow-2xl p-4 flex flex-col justify-between">
-			<div className="flex justify-between items-center z-10">
+		<div className="relative w-full h-full min-h-[400px] neo-card bg-[#141414] p-5 flex flex-col justify-between">
+			<div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 z-10 border-b border-zinc-800 pb-4">
 				<div>
-					<h3 className="text-lg font-bold text-white flex items-center gap-2">
-						<span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-						cluster topology graph
+					<h3 className="text-base font-bold text-white flex items-center gap-2 tracking-wide">
+						cluster topology visualizer
 					</h3>
-					<p className="text-xs text-gray-400 mt-0.5">real-time gossip exchange & node failure visualization</p>
+					<p className="text-xs text-zinc-500 font-mono mt-1">
+						real-time gossip exchange particles & failure status
+					</p>
 				</div>
-				<div className="flex gap-4 text-[10px] text-gray-400 bg-gray-950 px-3 py-1.5 rounded-lg border border-gray-800">
+				<div className="flex gap-2 text-[10px] text-zinc-400 bg-zinc-950 px-3 py-1.5 rounded-lg border border-zinc-800 font-mono">
 					<div className="flex items-center gap-1.5">
-						<span className="w-2 h-2 rounded-full bg-emerald-500"></span> healthy
+						<span className="w-2 h-2 rounded-full bg-[#10b981] border border-black" /> healthy
 					</div>
 					<div className="flex items-center gap-1.5">
-						<span className="w-2 h-2 rounded-full bg-amber-500"></span> suspect
+						<span className="w-2 h-2 rounded-full bg-[#fbbf24] border border-black" /> suspect
 					</div>
 					<div className="flex items-center gap-1.5">
-						<span className="w-2 h-2 rounded-full bg-red-500"></span> dead
+						<span className="w-2 h-2 rounded-full bg-[#ef4444] border border-black" /> dead
 					</div>
 				</div>
 			</div>
 			
-			<svg ref={svgRef} className="w-full h-full flex-grow"></svg>
+			<div className="flex-grow relative h-[300px]">
+				<svg ref={svgRef} className="w-full h-full" />
+			</div>
 			
-			<div className="text-[10px] text-gray-400 text-center select-none bg-gray-950/50 py-1 border-t border-gray-800/40 rounded-b-xl z-10">
-				Tip: Drag nodes to rearrange the visual layout
+			<div className="text-[10px] text-zinc-500 text-center select-none py-2 border-t border-zinc-800 font-mono z-10">
+				DRAG NODES TO ADJUST FORCE-DIRECTED LAYOUT POSITION
 			</div>
 		</div>
 	);
