@@ -52,18 +52,28 @@ export function MetricsCharts({ metrics }: MetricsChartsProps) {
 		});
 	}, [metrics]);
 
+	const tooltipStyle = {
+		backgroundColor: "#141414",
+		border: "2px solid #27272a",
+		borderRadius: "12px",
+		boxShadow: "4px 4px 0px 0px #000000",
+		padding: "8px 12px",
+		fontFamily: "var(--font-ibm-plex-mono), monospace",
+	};
+
 	return (
 		<div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
-			<div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 shadow-2xl flex flex-col justify-between min-h-[300px]">
+			<div className="neo-card p-5 bg-[#141414] flex flex-col justify-between min-h-[300px]">
 				<div>
-					<h3 className="text-md font-bold text-white flex items-center gap-1.5">
-						<span className="w-2 h-2 rounded-full bg-blue-500"></span>
-						cluster throughput
+					<h3 className="text-base font-bold text-white flex items-center gap-2 tracking-wide">
+						cluster requests throughput
 					</h3>
-					<p className="text-xs text-gray-400 mt-0.5">allowed vs. denied requests (cumulative per-interval)</p>
+					<p className="text-xs text-zinc-500 font-mono mt-1">
+						live rate of http 200 (allowed) vs http 429 (blocked)
+					</p>
 				</div>
 				
-				<div className="h-[200px] w-full mt-4 select-none">
+				<div className="h-[200px] w-full mt-6 select-none font-mono">
 					<ResponsiveContainer width="100%" height="100%">
 						<AreaChart data={history} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
 							<defs>
@@ -72,69 +82,70 @@ export function MetricsCharts({ metrics }: MetricsChartsProps) {
 									<stop offset="95%" stopColor="#10b981" stopOpacity={0} />
 								</linearGradient>
 								<linearGradient id="colorDenied" x1="0" y1="0" x2="0" y2="1">
-									<stop offset="5%" stopColor="#ef4444" stopOpacity={0.2} />
+									<stop offset="5%" stopColor="#ef4444" stopOpacity={0.15} />
 									<stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
 								</linearGradient>
 							</defs>
-							<CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
-							<XAxis dataKey="time" stroke="#4b5563" fontSize={10} tickLine={false} />
-							<YAxis stroke="#4b5563" fontSize={10} tickLine={false} />
+							<CartesianGrid strokeDasharray="4 4" stroke="#27272a" vertical={false} />
+							<XAxis dataKey="time" stroke="#71717a" fontSize={10} tickLine={false} />
+							<YAxis stroke="#71717a" fontSize={10} tickLine={false} />
 							<Tooltip
-								contentStyle={{ backgroundColor: "#111827", borderColor: "#374151", borderRadius: "8px" }}
-								labelStyle={{ color: "#9ca3af", fontSize: "11px" }}
-								itemStyle={{ fontSize: "12px" }}
+								contentStyle={tooltipStyle}
+								labelStyle={{ color: "#71717a", fontSize: "11px", fontWeight: "bold" }}
+								itemStyle={{ fontSize: "12px", padding: "2px 0" }}
 							/>
 							<Area
 								type="monotone"
 								dataKey="allowed"
 								stroke="#10b981"
-								strokeWidth={2}
+								strokeWidth={2.5}
 								fillOpacity={1}
 								fill="url(#colorAllowed)"
-								name="Allowed"
+								name="allowed"
 							/>
 							<Area
 								type="monotone"
 								dataKey="denied"
 								stroke="#ef4444"
-								strokeWidth={2}
+								strokeWidth={2.5}
 								fillOpacity={1}
 								fill="url(#colorDenied)"
-								name="Denied"
+								name="denied"
 							/>
 						</AreaChart>
 					</ResponsiveContainer>
 				</div>
 			</div>
 
-			<div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 shadow-2xl flex flex-col justify-between min-h-[300px]">
+			<div className="neo-card p-5 bg-[#141414] flex flex-col justify-between min-h-[300px]">
 				<div>
-					<h3 className="text-md font-bold text-white flex items-center gap-1.5">
-						<span className="w-2 h-2 rounded-full bg-violet-500"></span>
-						limiting latency (ms)
+					<h3 className="text-base font-bold text-white flex items-center gap-2 tracking-wide">
+						evaluation latency
 					</h3>
-					<p className="text-xs text-gray-400 mt-0.5">avg time spent per decision</p>
+					<p className="text-xs text-zinc-500 font-mono mt-1">
+						average time spent per rate limiting decision (ms)
+					</p>
 				</div>
 				
-				<div className="h-[200px] w-full mt-4 select-none">
+				<div className="h-[200px] w-full mt-6 select-none font-mono">
 					<ResponsiveContainer width="100%" height="100%">
 						<LineChart data={history} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-							<CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
-							<XAxis dataKey="time" stroke="#4b5563" fontSize={10} tickLine={false} />
-							<YAxis stroke="#4b5563" fontSize={10} tickLine={false} unit="ms" />
+							<CartesianGrid strokeDasharray="4 4" stroke="#27272a" vertical={false} />
+							<XAxis dataKey="time" stroke="#71717a" fontSize={10} tickLine={false} />
+							<YAxis stroke="#71717a" fontSize={10} tickLine={false} unit="ms" />
 							<Tooltip
-								contentStyle={{ backgroundColor: "#111827", borderColor: "#374151", borderRadius: "8px" }}
-								labelStyle={{ color: "#9ca3af", fontSize: "11px" }}
-								itemStyle={{ fontSize: "12px", color: "#8b5cf6" }}
+								contentStyle={tooltipStyle}
+								labelStyle={{ color: "#71717a", fontSize: "11px", fontWeight: "bold" }}
+								itemStyle={{ fontSize: "12px", color: "#fbbf24", padding: "2px 0" }}
 							/>
 							<Line
 								type="monotone"
 								dataKey="latency"
-								stroke="#8b5cf6"
+								stroke="#fbbf24"
 								strokeWidth={2.5}
-								dot={{ stroke: "#a78bfa", strokeWidth: 1.5, r: 3 }}
-								activeDot={{ r: 5 }}
-								name="Latency"
+								dot={{ stroke: "#fbbf24", strokeWidth: 2, r: 3.5, fill: "#141414" }}
+								activeDot={{ r: 6, fill: "#fbbf24", stroke: "#141414", strokeWidth: 2 }}
+								name="latency"
 							/>
 						</LineChart>
 					</ResponsiveContainer>
