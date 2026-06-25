@@ -1,93 +1,183 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { TopologyGraph } from "../components/TopologyGraph";
 import { MetricsCharts } from "../components/MetricsCharts";
+import { ConfirmModal } from "../components/ConfirmModal";
+import { ToastContainer, ToastData } from "../components/Toast";
+import { GossipStateInspector } from "../components/GossipStateInspector";
 import {
 	Activity,
-	Radio,
-	Heart,
-	Power,
 	RefreshCw,
-	Settings,
-	Shield,
 	Terminal,
-	AlertTriangle,
 } from "lucide-react";
+
+interface TerminalLine {
+	text: string;
+	type: "command" | "info" | "success" | "warning" | "error" | "output";
+}
+
+const TERMINAL_SEQUENCE: TerminalLine[] = [
+	{ text: "$ go run cmd/server/main.go -id node-1 -port 8080 -peers localhost:8081,localhost:8082", type: "command" },
+	{ text: "time=2026-06-25T10:11:12.000Z level=INFO msg=\"tobira starting\" node=node-1 port=8080 rate=10 window=60 metrics_reset=10 peers=localhost:8081,localhost:8082", type: "info" },
+	{ text: "time=2026-06-25T10:11:12.002Z level=INFO msg=\"starting metrics reset loop\" interval_seconds=10", type: "output" },
+	{ text: "time=2026-06-25T10:11:12.005Z level=INFO msg=\"tobira ready\" addr=http://localhost:8080", type: "success" },
+	{ text: "$ go run cmd/load/main.go -targets=http://localhost:8080 -rps=50 -workers=4 -duration=10", type: "command" },
+	{ text: "tobira load generator starting...", type: "info" },
+	{ text: "targets:  [http://localhost:8080]", type: "output" },
+	{ text: "rps:      50", type: "output" },
+	{ text: "workers:  4", type: "output" },
+	{ text: "time=2026-06-25T10:11:15.010Z level=INFO msg=\"gossip merged state\" from=node-2 merge_count=1", type: "info" },
+	{ text: "time=2026-06-25T10:11:16.120Z level=DEBUG msg=\"rate limit evaluation\" key=127.0.0.1 allowed=true local_count=3 global_sum=8", type: "success" },
+	{ text: "time=2026-06-25T10:11:16.420Z level=DEBUG msg=\"rate limit evaluation\" key=127.0.0.1 allowed=true local_count=4 global_sum=9", type: "success" },
+	{ text: "time=2026-06-25T10:11:17.030Z level=WARN msg=\"rate limit exceeded\" key=127.0.0.1 allowed=false global_sum=11", type: "error" },
+	{ text: "time=2026-06-25T10:11:18.110Z level=INFO msg=\"gossip merged state\" from=node-3 merge_count=2", type: "info" },
+	{ text: "load test finished", type: "success" },
+	{ text: "total requests: 500", type: "output" },
+	{ text: "allowed (200):  450", type: "output" },
+	{ text: "blocked (429):  50", type: "output" },
+];
 
 export default function Dashboard() {
 	const [nodePort, setNodePort] = useState("8080");
 	const [inputPort, setInputPort] = useState("8080");
 	const [gossipMuted, setGossipMuted] = useState(false);
 	const [heartbeatsMuted, setHeartbeatsMuted] = useState(false);
-	const [actionMessage, setActionMessage] = useState("");
 
-	const nodeUrl = `http://localhost:${nodePort}`;
-	const { status, cluster, metrics, events, lastGossipSignal, refreshCluster } = useWebSocket(nodeUrl);
+	const [toasts, setToasts] = useState<ToastData[]>([]);
+	const [confirmModal, setConfirmModal] = useState<{
+		open: boolean;
+		title: string;
+		description: string;
+		variant: "danger" | "warning" | "default";
+		onConfirm: () => void;
+	}>({ open: false, title: "", description: "", variant: "default", onConfirm: () => {} });
+
+	const [terminalLines, setTerminalLines] = useState<TerminalLine[]>([]);
+	const terminalBodyRef = useRef<HTMLDivElement | null>(null);
+
+	const getApiBaseUrl = useCallback(() => {
+		if (typeof window === "undefined") return `http://localhost:${nodePort}`;
+		if (window.location.hostname !== "localhost") {
+			return `${window.location.protocol}//${window.location.host}/api/proxy/${nodePort}`;
+		}
+		return `http://localhost:${nodePort}`;
+	}, [nodePort]);
+
+	const nodeUrl = getApiBaseUrl();
+	const { status, cluster, metrics, events, lastGossipSignal, gossipStats, refreshCluster } =
+		useWebSocket(nodeUrl);
+
+	useEffect(() => {
+		let lineIndex = 0;
+		const interval = setInterval(() => {
+			if (lineIndex < TERMINAL_SEQUENCE.length) {
+				const nextLine = TERMINAL_SEQUENCE[lineIndex];
+				if (nextLine) {
+					setTerminalLines((prev) => [...prev, nextLine]);
+				}
+				lineIndex++;
+			} else {
+				setTerminalLines([{ text: "clearing buffer...", type: "info" }]);
+				lineIndex = 0;
+			}
+		}, 1200);
+
+		return () => clearInterval(interval);
+	}, []);
+
+	useEffect(() => {
+		if (terminalBodyRef.current) {
+			terminalBodyRef.current.scrollTop = terminalBodyRef.current.scrollHeight;
+		}
+	}, [terminalLines]);
+
+	const addToast = useCallback((message: string, variant: ToastData["variant"]) => {
+		const id = `${Date.now()}-${Math.random()}`;
+		setToasts((prev) => [...prev, { id, message, variant }]);
+	}, []);
+
+	const dismissToast = useCallback((id: string) => {
+		setToasts((prev) => prev.filter((t) => t.id !== id));
+	}, []);
 
 	const handlePortChange = (e: React.FormEvent) => {
 		e.preventDefault();
 		if (inputPort.trim() !== "") {
 			setNodePort(inputPort);
-			// Reset simulation state indicators
 			setGossipMuted(false);
 			setHeartbeatsMuted(false);
-			setActionMessage(`Switched target connection to Node on port ${inputPort}`);
+			addToast(`Switched target connection to port ${inputPort}`, "info");
 		}
 	};
 
 	const toggleGossip = async () => {
 		const nextMute = !gossipMuted;
 		try {
-			const res = await fetch(`http://localhost:${nodePort}/api/admin/gossip?muted=${nextMute}`, {
-				method: "POST",
-			});
+			const res = await fetch(
+				`${nodeUrl}/api/admin/gossip?muted=${nextMute}`,
+				{ method: "POST" }
+			);
 			if (res.ok) {
 				setGossipMuted(nextMute);
-				setActionMessage(`Gossip transmission on Node ${nodePort} set to: ${nextMute ? "MUTED" : "ACTIVE"}`);
+				addToast(
+					`Gossip on port ${nodePort}: ${nextMute ? "Muted" : "Active"}`,
+					nextMute ? "info" : "success"
+				);
 			} else {
-				setActionMessage("Failed to update gossip settings.");
+				addToast("Failed to update gossip settings", "error");
 			}
-		} catch (err) {
-			console.error(err);
-			setActionMessage("Error connecting to Node administration API.");
+		} catch {
+			addToast("Error connecting to node administration API", "error");
 		}
 	};
 
 	const toggleHeartbeats = async () => {
 		const nextMute = !heartbeatsMuted;
 		try {
-			const res = await fetch(`http://localhost:${nodePort}/api/admin/heartbeat?muted=${nextMute}`, {
-				method: "POST",
-			});
+			const res = await fetch(
+				`${nodeUrl}/api/admin/heartbeat?muted=${nextMute}`,
+				{ method: "POST" }
+			);
 			if (res.ok) {
 				setHeartbeatsMuted(nextMute);
-				setActionMessage(`Heartbeats from Node ${nodePort} set to: ${nextMute ? "MUTED" : "ACTIVE"}`);
+				addToast(
+					`Heartbeats on port ${nodePort}: ${nextMute ? "Muted" : "Active"}`,
+					nextMute ? "info" : "success"
+				);
 			} else {
-				setActionMessage("Failed to update heartbeat settings.");
+				addToast("Failed to update heartbeat settings", "error");
 			}
-		} catch (err) {
-			console.error(err);
-			setActionMessage("Error connecting to Node administration API.");
+		} catch {
+			addToast("Error connecting to node administration API", "error");
 		}
 	};
 
-	const shutdownNode = async () => {
-		if (!confirm(`Are you sure you want to shut down Node on port ${nodePort}?`)) return;
-		try {
-			const res = await fetch(`http://localhost:${nodePort}/api/admin/shutdown`, {
-				method: "POST",
-			});
-			if (res.ok) {
-				setActionMessage(`Node on port ${nodePort} shutdown command successfully sent!`);
-			} else {
-				setActionMessage("Failed to initiate node shutdown.");
-			}
-		} catch (err) {
-			console.error(err);
-			setActionMessage("Error sending shutdown command.");
-		}
+	const shutdownNode = () => {
+		setConfirmModal({
+			open: true,
+			title: `Shutdown node on port ${nodePort}?`,
+			description:
+				"This will gracefully stop the node process. The cluster will detect it as dead within seconds and redistribute state.",
+			variant: "danger",
+			onConfirm: async () => {
+				setConfirmModal((prev) => ({ ...prev, open: false }));
+				try {
+					const res = await fetch(
+						`${nodeUrl}/api/admin/shutdown`,
+						{ method: "POST" }
+					);
+					if (res.ok) {
+						addToast(`Shutdown command sent to port ${nodePort}`, "success");
+					} else {
+						addToast("Failed to initiate node shutdown", "error");
+					}
+				} catch {
+					addToast("Error sending shutdown command", "error");
+				}
+			},
+		});
 	};
 
 	const total = metrics.requests_total;
@@ -97,117 +187,200 @@ export default function Dashboard() {
 	const successPercent = total > 0 ? ((allowed / total) * 100).toFixed(1) : "0.0";
 
 	return (
-		<div className="min-h-screen bg-gray-950 text-gray-100 font-sans p-6">
-			<header className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center bg-gray-900 border border-gray-800 rounded-2xl p-5 mb-8 shadow-2xl gap-4">
-				<div className="flex items-center gap-3">
-					<div className="bg-emerald-500/10 p-2.5 rounded-xl border border-emerald-500/20 text-emerald-400">
-						<Shield className="w-6 h-6 animate-pulse" />
+		<div className="min-h-screen bg-[#0a0a0a] text-zinc-100 font-sans selection:bg-[#fbbf24] selection:text-black">
+			<header className="border-b-2 border-zinc-800 bg-[#141414]/90 sticky top-0 z-40">
+				<div className="max-w-[1440px] mx-auto px-6 py-4 grid grid-cols-2 md:grid-cols-3 items-center gap-4">
+					<div className="hidden md:flex justify-start">
 					</div>
-					<div>
-						<h1 className="text-xl font-black tracking-tight text-white flex items-center gap-2">
-							tobira <span className="text-xs px-2 py-0.5 rounded bg-gray-800 border border-gray-700 text-gray-400 font-normal">console</span>
+
+					<div className="flex justify-start md:justify-center">
+						<h1 className="text-xl font-bold tracking-widest text-white font-mono">
+							tobira
 						</h1>
-						<p className="text-xs text-gray-400 mt-0.5">distributed gossip rate limiter coordinator dashboard</p>
-					</div>
-				</div>
-
-				<div className="flex flex-wrap items-center gap-4">
-					<div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs border font-medium ${
-						status === "connected"
-							? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-							: status === "connecting"
-							? "bg-amber-500/10 border-amber-500/20 text-amber-400 animate-pulse"
-							: "bg-red-500/10 border-red-500/20 text-red-400"
-					}`}>
-						<span className={`w-2 h-2 rounded-full ${
-							status === "connected" ? "bg-emerald-400" : status === "connecting" ? "bg-amber-400" : "bg-red-400"
-						}`}></span>
-						{status.toUpperCase()}
 					</div>
 
-					<form onSubmit={handlePortChange} className="flex items-center gap-2 bg-gray-950 px-2 py-1 rounded-xl border border-gray-800">
-						<span className="text-[10px] text-gray-500 font-mono px-1">port</span>
-						<input
-							type="number"
-							value={inputPort}
-							onChange={(e) => setInputPort(e.target.value)}
-							className="w-16 bg-transparent text-sm text-white font-mono focus:outline-none border-none py-1 text-center"
-							placeholder="8080"
-						/>
-						<button
-							type="submit"
-							className="text-xs bg-gray-800 hover:bg-gray-700 active:bg-gray-800 text-white px-2.5 py-1 rounded-lg border border-gray-700 transition"
+					<div className="flex justify-end items-center gap-3">
+						<a
+							href="https://github.com/pranav718/tobira"
+							target="_blank"
+							rel="noreferrer"
+							className="neo-btn px-3 py-1.5 text-xs font-mono font-bold"
 						>
-							connect
-						</button>
-					</form>
-
-					<button
-						onClick={refreshCluster}
-						className="p-2 bg-gray-800 hover:bg-gray-700 active:bg-gray-800 border border-gray-700 rounded-xl transition text-gray-300"
-						title="Force Refresh Cluster Topology"
-					>
-						<RefreshCw className="w-4 h-4" />
-					</button>
+							<svg
+								viewBox="0 0 24 24"
+								width="16"
+								height="16"
+								stroke="currentColor"
+								strokeWidth="2"
+								fill="none"
+								strokeLinecap="round"
+								strokeLinejoin="round"
+								className="w-4 h-4 text-zinc-400"
+							>
+								<path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" />
+							</svg>
+							GitHub
+						</a>
+						<a
+							href="#console"
+							className="neo-btn px-3 py-1.5 text-xs font-mono font-bold"
+						>
+							console workspace
+						</a>
+					</div>
 				</div>
 			</header>
 
-			<main className="max-w-7xl mx-auto flex flex-col gap-8">
-				{actionMessage && (
-					<div className="flex items-center gap-2 bg-blue-950/20 border border-blue-800/20 rounded-xl px-4 py-2.5 text-xs text-blue-400 select-none">
-						<Settings className="w-4 h-4 animate-spin text-blue-400" />
-						{actionMessage}
+			<section className="border-b-2 border-zinc-800 bg-[#0e0e0e] py-12 lg:py-20 relative overflow-hidden">
+				<div className="max-w-[1440px] mx-auto px-6 grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+					<div className="lg:col-span-6 flex flex-col gap-6">
+						<h2 className="text-4xl sm:text-5xl font-bold tracking-tight text-white leading-tight font-sans">
+							high performance <span className="text-[#fbbf24]">distributed</span> rate limiting.
+						</h2>
+						
+						<p className="text-base text-zinc-400 leading-relaxed font-mono">
+							a high-concurrency rate limiter cluster built in go, designed to coordinate request policies across nodes using a peer-to-peer udp gossip protocol. leverages convergent g-counters to track rate limits without central redis databases or single points of failure.
+						</p>
+
+						<div className="border-2 border-zinc-800 rounded-xl p-5 bg-zinc-900/30 text-xs leading-relaxed text-zinc-400 font-mono flex flex-col gap-3">
+							<p>
+								<strong className="text-white">what is this project?</strong> most rate limiters count user requests by saving them in a single central database like redis. if that database crashes, the entire application breaks. tobira works differently: multiple servers talk directly to each other to share request counts. if one server goes down, the others continue running and sharing the load.
+							</p>
+							<p>
+								detailed information on how the go code is designed, how to build the cluster, and how to run tests can be found in the project documentation.
+							</p>
+							<a
+								href="https://github.com/pranav718/tobira#readme"
+								target="_blank"
+								rel="noreferrer"
+								className="text-xs text-[#fbbf24] hover:underline flex items-center gap-1.5 mt-1 font-bold"
+							>
+								read the full implementation details in readme.md
+							</a>
+						</div>
+
+						<div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mt-2 p-4 border-2 border-zinc-800 rounded-xl bg-zinc-900/50">
+							<form onSubmit={handlePortChange} className="flex items-center gap-2 flex-wrap">
+								<span className="text-xs font-mono font-bold text-zinc-400">connect port:</span>
+								<input
+									type="number"
+									value={inputPort}
+									onChange={(e) => setInputPort(e.target.value)}
+									className="neo-input w-24 text-center"
+									placeholder="8080"
+								/>
+								<button type="submit" className="neo-btn-accent px-4 py-1.5 text-xs font-mono">
+									go
+								</button>
+							</form>
+
+							<div className="h-6 w-[2px] bg-zinc-800 hidden sm:block" />
+
+							<div className="flex items-center gap-2">
+								<span className="text-xs font-mono font-bold text-zinc-400">status:</span>
+								<div className={`border-2 px-3 py-1 rounded-lg text-xs font-mono font-black tracking-wider ${
+									status === "connected" ? "bg-[#10b981]/15 border-[#10b981] text-[#10b981]" :
+									status === "connecting" ? "bg-[#fbbf24]/15 border-[#fbbf24] text-[#fbbf24] animate-pulse" :
+									"bg-[#ef4444]/15 border-[#ef4444] text-[#ef4444]"
+								}`}>
+									{status}
+								</div>
+							</div>
+						</div>
 					</div>
-				)}
+
+					<div className="lg:col-span-6">
+						<div className="border-2 border-zinc-800 rounded-xl overflow-hidden shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] bg-zinc-950 flex flex-col h-[400px]">
+							<div className="bg-zinc-900 border-b-2 border-zinc-800 px-4 py-3 flex items-center justify-between">
+								<div className="flex items-center gap-2">
+									<div className="w-3 h-3 rounded-full bg-[#ef4444] border border-black" />
+									<div className="w-3 h-3 rounded-full bg-[#fbbf24] border border-black" />
+									<div className="w-3 h-3 rounded-full bg-[#10b981] border border-black" />
+								</div>
+								<div className="text-xs text-zinc-500 font-mono font-bold flex items-center gap-1.5">
+									<Terminal className="w-3.5 h-3.5 text-zinc-500" />
+									bash - tobira-node
+								</div>
+								<div className="w-12" />
+							</div>
+
+							<div ref={terminalBodyRef} className="p-4 flex-1 overflow-y-auto font-mono text-xs leading-relaxed space-y-2 select-text">
+								{terminalLines.map((line, idx) => {
+									if (!line) return null;
+									return (
+										<div key={idx} className="flex gap-2">
+											{line.type === "command" ? (
+												<span className="text-zinc-500 select-none">&gt;</span>
+											) : null}
+											<span className={
+												line.type === "command" ? "text-white font-bold" :
+												line.type === "info" ? "text-[#6366f1]" :
+												line.type === "success" ? "text-[#10b981] font-semibold" :
+												line.type === "error" ? "text-[#ef4444] font-semibold" :
+												line.type === "output" ? "text-zinc-400" : "text-zinc-500"
+											}>
+												{line.text}
+											</span>
+										</div>
+									);
+								})}
+							</div>
+						</div>
+					</div>
+				</div>
+			</section>
+
+			<main id="console" className="max-w-[1440px] mx-auto px-6 py-12 flex flex-col gap-10">
+				
+				<div className="border-b-2 border-zinc-800 pb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+					<div>
+						<h2 className="text-2xl font-bold text-white tracking-wider font-mono flex items-center gap-2">
+							interactive limiter workspace
+						</h2>
+						<p className="text-xs text-zinc-500 mt-1">
+							simulate latency spikes, network partitions, or node mutations live
+						</p>
+					</div>
+
+					<button
+						onClick={refreshCluster}
+						className="neo-btn px-4 py-2 text-xs font-mono font-bold"
+						title="Force refresh topology layout"
+					>
+						<RefreshCw className="w-4 h-4" />
+						sync topology
+					</button>
+				</div>
 
 				<section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-					<div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 shadow-xl flex items-center justify-between">
-						<div>
-							<span className="text-[10px] uppercase font-bold tracking-wider text-gray-500">throughput (interval)</span>
-							<h2 className="text-2xl font-black text-white mt-1">{total}</h2>
-							<p className="text-[10px] text-gray-400 mt-1">total requests processed</p>
-						</div>
-						<div className="bg-blue-500/10 p-3 rounded-xl border border-blue-500/20 text-blue-400">
-							<Activity className="w-5 h-5" />
-						</div>
+					<div className="neo-card p-4 bg-[#141414] hover:shadow-[4px_4px_0px_0px_#fbbf24] hover:border-[#fbbf24]">
+						<span className="text-[10px] font-bold text-zinc-500 font-mono tracking-wider">throughput</span>
+						<h3 className="text-xl font-black text-white mt-1 font-mono">{total}</h3>
+						<p className="text-[9px] text-zinc-500 mt-0.5">total calls</p>
 					</div>
-
-					<div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 shadow-xl flex items-center justify-between">
-						<div>
-							<span className="text-[10px] uppercase font-bold tracking-wider text-gray-500">allowed rate</span>
-							<h2 className="text-2xl font-black text-emerald-400 mt-1">{successPercent}%</h2>
-							<p className="text-[10px] text-emerald-500/80 mt-1">{allowed} requests succeeded</p>
-						</div>
-						<div className="bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20 text-emerald-400">
-							<Shield className="w-5 h-5" />
-						</div>
+					<div className="neo-card p-4 bg-[#141414] hover:shadow-[4px_4px_0px_0px_#10b981] hover:border-[#10b981]">
+						<span className="text-[10px] font-bold text-zinc-500 font-mono tracking-wider">allowed</span>
+						<h3 className="text-xl font-black text-[#10b981] mt-1 font-mono">{successPercent}%</h3>
+						<p className="text-[9px] text-zinc-500 mt-0.5">{allowed} calls</p>
 					</div>
-
-					<div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 shadow-xl flex items-center justify-between">
-						<div>
-							<span className="text-[10px] uppercase font-bold tracking-wider text-gray-500">denied rate</span>
-							<h2 className="text-2xl font-black text-rose-500 mt-1">{deniedPercent}%</h2>
-							<p className="text-[10px] text-rose-500/80 mt-1">{denied} requests blocked</p>
-						</div>
-						<div className="bg-rose-500/10 p-3 rounded-xl border border-rose-500/20 text-rose-500">
-							<AlertTriangle className="w-5 h-5" />
-						</div>
+					<div className="neo-card p-4 bg-[#141414] hover:shadow-[4px_4px_0px_0px_#ef4444] hover:border-[#ef4444]">
+						<span className="text-[10px] font-bold text-zinc-500 font-mono tracking-wider">blocked</span>
+						<h3 className="text-xl font-black text-[#ef4444] mt-1 font-mono">{deniedPercent}%</h3>
+						<p className="text-[9px] text-zinc-500 mt-0.5 font-mono">{denied} 429 requests</p>
 					</div>
-
-					<div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 shadow-xl flex items-center justify-between">
-						<div>
-							<span className="text-[10px] uppercase font-bold tracking-wider text-gray-500">latency (avg)</span>
-							<h2 className="text-2xl font-black text-violet-400 mt-1">{metrics.average_latency_ms.toFixed(2)}ms</h2>
-							<p className="text-[10px] text-gray-400 mt-1">limiting evaluation duration</p>
-						</div>
-						<div className="bg-violet-500/10 p-3 rounded-xl border border-violet-500/20 text-violet-400">
-							<RefreshCw className="w-5 h-5" />
-						</div>
+					<div className="neo-card p-4 bg-[#141414] hover:shadow-[4px_4px_0px_0px_#6366f1] hover:border-[#6366f1]">
+						<span className="text-[10px] font-bold text-zinc-500 font-mono tracking-wider">latency</span>
+						<h3 className="text-xl font-black text-[#6366f1] mt-1 font-mono">
+							{metrics.average_latency_ms.toFixed(2)}
+							<span className="text-xs text-zinc-500 ml-0.5">ms</span>
+						</h3>
+						<p className="text-[9px] text-zinc-500 mt-0.5">evaluation avg</p>
 					</div>
 				</section>
 
-				<section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-					<div className="lg:col-span-2">
+				<section className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+					
+					<div className="lg:col-span-8">
 						<TopologyGraph
 							cluster={cluster}
 							activeNodeId={cluster?.id || ""}
@@ -215,79 +388,89 @@ export default function Dashboard() {
 						/>
 					</div>
 
-					<div className="flex flex-col gap-6">
-						<div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 shadow-2xl">
-							<h3 className="text-md font-bold text-white flex items-center gap-1.5">
-								<Settings className="w-4 h-4 text-gray-400" />
+					<div className="lg:col-span-4 flex flex-col gap-8">
+						
+						<div className="neo-card p-5 bg-[#141414]">
+							<h3 className="text-base font-bold text-white flex items-center gap-2 tracking-wide border-b border-zinc-800 pb-3">
 								failure simulator
 							</h3>
-							<p className="text-xs text-gray-400 mt-0.5">mute interfaces to simulate partition splits or crash nodes</p>
+							<p className="text-xs text-zinc-500 font-mono mt-2">
+								simulate partition splits by shutting off udp heartbeats or gossip merges
+							</p>
 
 							<div className="flex flex-col gap-3 mt-4">
 								<button
 									onClick={toggleHeartbeats}
-									className={`flex items-center justify-between px-4 py-3 rounded-xl border transition text-sm font-semibold ${
+									className={`flex items-center justify-between px-3.5 py-3 border-2 rounded-xl transition font-mono text-xs font-bold ${
 										heartbeatsMuted
-											? "bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20"
-											: "bg-gray-850 border-gray-800 text-gray-200 hover:bg-gray-800"
+											? "bg-[#fbbf24]/10 border-[#fbbf24] text-[#fbbf24]"
+											: "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-700"
 									}`}
 								>
 									<span className="flex items-center gap-2">
-										<Heart className={`w-4 h-4 ${heartbeatsMuted ? "fill-amber-400" : ""}`} />
-										mute heartbeats (udp)
+										mute heartbeats
 									</span>
-									<span className="text-[10px] px-2 py-0.5 rounded font-mono uppercase bg-gray-950 border border-gray-800">
+									<span className="text-[10px] px-2 py-0.5 rounded bg-zinc-950 border border-zinc-800 uppercase">
 										{heartbeatsMuted ? "muted" : "active"}
 									</span>
 								</button>
 
 								<button
 									onClick={toggleGossip}
-									className={`flex items-center justify-between px-4 py-3 rounded-xl border transition text-sm font-semibold ${
+									className={`flex items-center justify-between px-3.5 py-3 border-2 rounded-xl transition font-mono text-xs font-bold ${
 										gossipMuted
-											? "bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20"
-											: "bg-gray-850 border-gray-800 text-gray-200 hover:bg-gray-800"
+											? "bg-[#fbbf24]/10 border-[#fbbf24] text-[#fbbf24]"
+											: "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-700"
 									}`}
 								>
 									<span className="flex items-center gap-2">
-										<Radio className={`w-4 h-4 ${gossipMuted ? "animate-pulse" : ""}`} />
-										mute gossip state sync
+										mute gossip sync
 									</span>
-									<span className="text-[10px] px-2 py-0.5 rounded font-mono uppercase bg-gray-950 border border-gray-800">
+									<span className="text-[10px] px-2 py-0.5 rounded bg-zinc-950 border border-zinc-800 uppercase">
 										{gossipMuted ? "muted" : "active"}
 									</span>
 								</button>
 
 								<button
 									onClick={shutdownNode}
-									className="flex items-center justify-center gap-2 w-full mt-2 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white font-semibold py-3 rounded-xl text-sm border border-red-500/30 transition shadow-lg"
+									className="neo-btn-danger w-full mt-2 py-3 text-xs font-mono"
 								>
-									<Power className="w-4 h-4" />
-									crash node (graceful stop)
+									crash active node
 								</button>
 							</div>
 						</div>
 
-						<div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 shadow-2xl flex flex-col flex-grow min-h-[220px]">
-							<h3 className="text-md font-bold text-white flex items-center gap-1.5 mb-3">
-								<Terminal className="w-4 h-4 text-gray-400" />
-								limiter event log
+						<div className="neo-card p-5 bg-[#141414] flex flex-col flex-grow min-h-[250px]">
+							<h3 className="text-base font-bold text-white flex items-center gap-2 tracking-wide border-b border-zinc-800 pb-3">
+								node request log
 							</h3>
-
-							<div className="bg-gray-950 border border-gray-850 rounded-xl p-3 flex-grow overflow-y-auto max-h-[200px] font-mono text-[10px] leading-relaxed text-gray-300">
+							
+							<div className="bg-zinc-950 border-2 border-zinc-800 rounded-xl p-3 flex-grow overflow-y-auto max-h-[250px] font-mono text-[10px] leading-relaxed text-zinc-400 mt-4">
 								{events.length === 0 ? (
-									<div className="text-gray-500 text-center py-8">waiting for api traffic...</div>
+									<div className="text-zinc-700 text-center py-10 flex flex-col items-center gap-2">
+										<Activity className="w-8 h-8 text-zinc-800 animate-pulse" />
+										<span>listening for rate limiting traffic...</span>
+									</div>
 								) : (
 									<div className="space-y-1.5">
 										{events.map((ev) => (
-											<div key={ev.id} className="flex justify-between border-b border-gray-900 pb-1">
+											<div
+												key={ev.id}
+												className="flex justify-between border-b border-zinc-900 pb-1"
+											>
 												<span className="flex gap-2">
-													<span className={ev.allowed ? "text-emerald-400 font-bold" : "text-rose-500 font-bold"}>
+													<span
+														className={
+															ev.allowed
+																? "text-[#10b981] font-bold"
+																: "text-[#ef4444] font-bold"
+														}
+													>
 														{ev.allowed ? "ALLOW" : "BLOCK"}
 													</span>
-													<span className="text-gray-400">{ev.key}</span>
+													<span className="text-zinc-300 font-bold">{ev.key}</span>
 												</span>
-												<span className="text-gray-500 select-none">
+												<span className="text-zinc-600 select-none">
 													{new Date(ev.timestamp).toLocaleTimeString()}
 												</span>
 											</div>
@@ -299,10 +482,89 @@ export default function Dashboard() {
 					</div>
 				</section>
 
+				<section className="neo-card p-6 bg-[#141414] border-2 border-zinc-800">
+					<h3 className="text-base font-bold text-white tracking-wider font-mono border-b border-zinc-800 pb-3 mb-4 flex items-center gap-2">
+						tobira instruction
+					</h3>
+					
+					<div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm leading-relaxed text-zinc-400 font-mono">
+						<div className="flex flex-col gap-4">
+							<div className="flex gap-3">
+								<span className="flex-shrink-0 w-6 h-6 rounded-full bg-[#fbbf24] text-black font-bold flex items-center justify-center text-xs">
+									1
+								</span>
+								<div>
+									<h4 className="text-white font-bold text-xs tracking-wider">start the cluster</h4>
+									<p className="text-xs text-zinc-500 mt-1">
+										run <code className="text-[#fbbf24] bg-zinc-900 px-1 py-0.5 rounded">sh scripts/demo.sh</code> in your terminal. this orchestrates 4 peered docker containers and spins up the next.js console dashboard.
+									</p>
+								</div>
+							</div>
+
+							<div className="flex gap-3">
+								<span className="flex-shrink-0 w-6 h-6 rounded-full bg-[#fbbf24] text-black font-bold flex items-center justify-center text-xs">
+									2
+								</span>
+								<div>
+									<h4 className="text-white font-bold text-xs tracking-wider">generate client traffic</h4>
+									<p className="text-xs text-zinc-500 mt-1">
+										the demo script launches <code className="text-[#fbbf24] bg-zinc-900 px-1 py-0.5 rounded">tobira-load</code> to dispatch background http traffic across nodes at a rate of 50 rps. you will see allowed/denied metrics fluctuate live.
+									</p>
+								</div>
+							</div>
+						</div>
+
+						<div className="flex flex-col gap-4">
+							<div className="flex gap-3">
+								<span className="flex-shrink-0 w-6 h-6 rounded-full bg-[#fbbf24] text-black font-bold flex items-center justify-center text-xs">
+									3
+								</span>
+								<div>
+									<h4 className="text-white font-bold text-xs tracking-wider">mute gossip / partitions</h4>
+									<p className="text-xs text-zinc-500 mt-1">
+										mute gossip sync or heartbeats using the simulator buttons. watch the nodes turn to suspect (yellow) or dead (red) as failure detectors report state divergence.
+									</p>
+								</div>
+							</div>
+
+							<div className="flex gap-3">
+								<span className="flex-shrink-0 w-6 h-6 rounded-full bg-[#fbbf24] text-black font-bold flex items-center justify-center text-xs">
+									4
+								</span>
+								<div>
+									<h4 className="text-white font-bold text-xs tracking-wider">crash and recover nodes</h4>
+									<p className="text-xs text-zinc-500 mt-1">
+										crash nodes to test failover routing. the cluster automatically detects dead peers, re-routes state updates, and merges g-counters back together when the node recovers.
+									</p>
+								</div>
+							</div>
+						</div>
+					</div>
+				</section>
+
+				<section>
+					<GossipStateInspector
+						gossipStats={gossipStats}
+						localNodeId={cluster?.id || ""}
+					/>
+				</section>
+
 				<section className="mb-6">
 					<MetricsCharts metrics={metrics} />
 				</section>
 			</main>
+
+			<ConfirmModal
+				open={confirmModal.open}
+				title={confirmModal.title}
+				description={confirmModal.description}
+				variant={confirmModal.variant}
+				confirmLabel="SHUTDOWN NODE"
+				onConfirm={confirmModal.onConfirm}
+				onCancel={() => setConfirmModal((prev) => ({ ...prev, open: false }))}
+			/>
+
+			<ToastContainer toasts={toasts} onDismiss={dismissToast} />
 		</div>
 	);
 }
