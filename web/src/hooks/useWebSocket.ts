@@ -35,6 +35,15 @@ export interface GossipSignal {
 	payload: unknown;
 }
 
+export type GCounterState = { [key: string]: { [nodeId: string]: number } };
+
+export interface GossipStats {
+	state: GCounterState;
+	mergeCount: number;
+	lastMergeTime: number | null;
+	changedKeys: Set<string>;
+}
+
 export function useWebSocket(nodeUrl: string) {
 	const [status, setStatus] = useState<"connecting" | "connected" | "disconnected">("disconnected");
 	const [cluster, setCluster] = useState<NodeInfo | null>(null);
@@ -46,6 +55,12 @@ export function useWebSocket(nodeUrl: string) {
 	});
 	const [events, setEvents] = useState<LimitEvent[]>([]);
 	const [lastGossipSignal, setLastGossipSignal] = useState<GossipSignal | null>(null);
+	const [gossipStats, setGossipStats] = useState<GossipStats>({
+		state: {},
+		mergeCount: 0,
+		lastMergeTime: null,
+		changedKeys: new Set(),
+	});
 
 	const socketRef = useRef<WebSocket | null>(null);
 	const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -121,6 +136,35 @@ export function useWebSocket(nodeUrl: string) {
 								timestamp: Date.now(),
 								payload: data,
 							});
+
+							if (data && typeof data === "object") {
+								const incomingState = data as GCounterState;
+								setGossipStats((prev) => {
+									const changed = new Set<string>();
+									const merged = { ...prev.state };
+
+									for (const [key, nodeCounts] of Object.entries(incomingState)) {
+										if (!merged[key]) {
+											merged[key] = {};
+											changed.add(key);
+										}
+										for (const [nodeId, count] of Object.entries(nodeCounts)) {
+											const current = merged[key][nodeId] || 0;
+											if (count > current) {
+												merged[key] = { ...merged[key], [nodeId]: count };
+												changed.add(key);
+											}
+										}
+									}
+
+									return {
+										state: merged,
+										mergeCount: prev.mergeCount + 1,
+										lastMergeTime: Date.now(),
+										changedKeys: changed,
+									};
+								});
+							}
 							break;
 
 						case "limit":
@@ -185,6 +229,7 @@ export function useWebSocket(nodeUrl: string) {
 		metrics,
 		events,
 		lastGossipSignal,
+		gossipStats,
 		refreshCluster: fetchClusterInfo,
 	};
 }
