@@ -1,21 +1,25 @@
 import type { Metadata } from "next";
-import localFont from "next/font/local";
+import { Space_Grotesk, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 
-const geistSans = localFont({
-  src: "./fonts/GeistVF.woff",
-  variable: "--font-geist-sans",
-  weight: "100 900",
+const spaceGrotesk = Space_Grotesk({
+  subsets: ["latin"],
+  variable: "--font-space-grotesk",
+  display: "swap",
+  weight: ["300", "400", "500", "600", "700"],
 });
-const geistMono = localFont({
-  src: "./fonts/GeistMonoVF.woff",
-  variable: "--font-geist-mono",
-  weight: "100 900",
+
+const ibmPlexMono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  variable: "--font-ibm-plex-mono",
+  display: "swap",
+  weight: ["400", "500", "600"],
 });
 
 export const metadata: Metadata = {
   title: "tobira: distributed rate limiting console",
-  description: "real-time cluster topology, gossip particle visualization, and failure simulation console for tobira.",
+  description:
+    "real-time cluster topology, gossip particle visualization, and failure simulation console for tobira.",
 };
 
 export default function RootLayout({
@@ -26,7 +30,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${spaceGrotesk.variable} ${ibmPlexMono.variable} antialiased`}
       >
         {children}
       </body>

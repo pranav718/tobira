@@ -3,25 +3,138 @@
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --background: #0a0a0a;
+  --foreground: #f3f4f6;
+  --surface: #141414;
+  --surface-light: #1e1e1e;
+  --border: #2e2e2e;
+  --border-light: #3e3e3e;
+  --accent: #fbbf24;
+  --success: #10b981;
+  --danger: #ef4444;
+  --info: #6366f1;
 }
 
 body {
   color: var(--foreground);
   background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-space-grotesk), system-ui, sans-serif;
+  overflow-x: hidden;
+}
+
+@layer base {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #3e3e3e #0a0a0a;
+  }
+
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: #0a0a0a;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background-color: #2e2e2e;
+    border: 2px solid #0a0a0a;
+    border-radius: 4px;
+  }
 }
 
 @layer utilities {
   .text-balance {
     text-wrap: balance;
+  }
+
+  .neo-card {
+    @apply bg-[#141414] border-2 border-zinc-800 rounded-xl transition-all duration-150;
+    box-shadow: 4px 4px 0px 0px rgba(0, 0, 0, 1);
+  }
+  .neo-card:hover {
+    @apply -translate-x-0.5 -translate-y-0.5;
+    box-shadow: 6px 6px 0px 0px rgba(0, 0, 0, 1);
+  }
+
+  .neo-card-accent {
+    @apply bg-[#141414] border-2 border-[#fbbf24] rounded-xl transition-all duration-150;
+    box-shadow: 4px 4px 0px 0px #fbbf24;
+  }
+  .neo-card-accent:hover {
+    @apply -translate-x-0.5 -translate-y-0.5;
+    box-shadow: 6px 6px 0px 0px #fbbf24;
+  }
+
+  .neo-card-success {
+    @apply bg-[#141414] border-2 border-[#10b981] rounded-xl transition-all duration-150;
+    box-shadow: 4px 4px 0px 0px #10b981;
+  }
+  .neo-card-success:hover {
+    @apply -translate-x-0.5 -translate-y-0.5;
+    box-shadow: 6px 6px 0px 0px #10b981;
+  }
+
+  .neo-card-danger {
+    @apply bg-[#141414] border-2 border-[#ef4444] rounded-xl transition-all duration-150;
+    box-shadow: 4px 4px 0px 0px #ef4444;
+  }
+  .neo-card-danger:hover {
+    @apply -translate-x-0.5 -translate-y-0.5;
+    box-shadow: 6px 6px 0px 0px #ef4444;
+  }
+
+  .neo-card-info {
+    @apply bg-[#141414] border-2 border-[#6366f1] rounded-xl transition-all duration-150;
+    box-shadow: 4px 4px 0px 0px #6366f1;
+  }
+  .neo-card-info:hover {
+    @apply -translate-x-0.5 -translate-y-0.5;
+    box-shadow: 6px 6px 0px 0px #6366f1;
+  }
+
+  .neo-btn {
+    @apply bg-[#1a1a1a] hover:bg-zinc-800 border-2 border-zinc-700 text-gray-200 px-4 py-2 rounded-xl transition-all duration-150 flex items-center justify-center gap-2;
+    box-shadow: 3px 3px 0px 0px rgba(0, 0, 0, 1);
+  }
+  .neo-btn:hover {
+    @apply -translate-x-0.5 -translate-y-0.5;
+    box-shadow: 5px 5px 0px 0px rgba(0, 0, 0, 1);
+  }
+  .neo-btn:active {
+    @apply translate-x-0.5 translate-y-0.5;
+    box-shadow: 1px 1px 0px 0px rgba(0, 0, 0, 1);
+  }
+
+  .neo-btn-accent {
+    @apply bg-[#fbbf24] hover:bg-[#f59e0b] border-2 border-black text-black px-4 py-2 rounded-xl font-bold transition-all duration-150 flex items-center justify-center gap-2;
+    box-shadow: 3px 3px 0px 0px rgba(0, 0, 0, 1);
+  }
+  .neo-btn-accent:hover {
+    @apply -translate-x-0.5 -translate-y-0.5;
+    box-shadow: 5px 5px 0px 0px rgba(0, 0, 0, 1);
+  }
+  .neo-btn-accent:active {
+    @apply translate-x-0.5 translate-y-0.5;
+    box-shadow: 1px 1px 0px 0px rgba(0, 0, 0, 1);
+  }
+
+  .neo-btn-danger {
+    @apply bg-[#ef4444] hover:bg-[#dc2626] border-2 border-black text-white px-4 py-2 rounded-xl font-bold transition-all duration-150 flex items-center justify-center gap-2;
+    box-shadow: 3px 3px 0px 0px rgba(0, 0, 0, 1);
+  }
+  .neo-btn-danger:hover {
+    @apply -translate-x-0.5 -translate-y-0.5;
+    box-shadow: 5px 5px 0px 0px rgba(0, 0, 0, 1);
+  }
+  .neo-btn-danger:active {
+    @apply translate-x-0.5 translate-y-0.5;
+    box-shadow: 1px 1px 0px 0px rgba(0, 0, 0, 1);
+  }
+
+  .neo-input {
+    @apply bg-[#1a1a1a] border-2 border-zinc-800 rounded-xl px-3 py-1.5 focus:outline-none focus:border-[#fbbf24] transition-all duration-150 text-white font-mono text-sm;
+    box-shadow: inset 2px 2px 4px rgba(0,0,0,0.5);
   }
 }
