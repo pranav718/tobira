@@ -78,7 +78,7 @@ func main() {
 						return
 					}
 					start := time.Now()
-					req, err := http.NewRequestWithContext(ctx, "get", url, nil)
+					req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 					if err != nil {
 						results <- struct {
 							latency time.Duration
