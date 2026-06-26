@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "node -e \"const fs = require('fs'); fs.rmSync('.next', { recursive: true, force: true }); console.log('Cleaned .next cache')\"",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
