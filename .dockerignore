@@ -1,0 +1,14 @@
+.git
+.github
+.DS_Store
+*.md
+!web/README.md
+
+# local binaries
+tobira
+tobira-load
+
+# local build artifacts
+web/.next
+web/node_modules
+web/out
