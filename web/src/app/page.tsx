@@ -44,6 +44,15 @@ export default function Dashboard() {
 	const [inputPort, setInputPort] = useState("9080");
 	const [gossipMuted, setGossipMuted] = useState(false);
 	const [heartbeatsMuted, setHeartbeatsMuted] = useState(false);
+	const [activeAlgorithm, setActiveAlgorithm] = useState("fixed_window");
+	const [algorithmLoading, setAlgorithmLoading] = useState(false);
+
+	const ALGORITHMS = [
+		{ id: "fixed_window", label: "fixed window" },
+		{ id: "sliding_window", label: "sliding window" },
+		{ id: "token_bucket", label: "token bucket" },
+		{ id: "leaky_bucket", label: "leaky bucket" },
+	];
 
 	const [toasts, setToasts] = useState<ToastData[]>([]);
 	const [confirmModal, setConfirmModal] = useState<{
@@ -109,6 +118,40 @@ export default function Dashboard() {
 			setGossipMuted(false);
 			setHeartbeatsMuted(false);
 			addToast(`Switched target connection to port ${inputPort}`, "info");
+		}
+	};
+
+	useEffect(() => {
+		const fetchAlgorithm = async () => {
+			try {
+				const res = await fetch(`${nodeUrl}/health`);
+				if (res.ok) {
+					const data = await res.json();
+					if (data.algorithm) setActiveAlgorithm(data.algorithm);
+				}
+			} catch { }
+		};
+		fetchAlgorithm();
+	}, [nodeUrl]);
+
+	const switchAlgorithm = async (algorithm: string) => {
+		if (algorithm === activeAlgorithm || algorithmLoading) return;
+		setAlgorithmLoading(true);
+		try {
+			const res = await fetch(
+				`${nodeUrl}/api/admin/algorithm?algorithm=${algorithm}`,
+				{ method: "POST" }
+			);
+			if (res.ok) {
+				setActiveAlgorithm(algorithm);
+				addToast(`Algorithm switched to ${algorithm.replace(/_/g, " ")}`, "success");
+			} else {
+				addToast("Failed to switch algorithm", "error");
+			}
+		} catch {
+			addToast("Error connecting to node administration API", "error");
+		} finally {
+			setAlgorithmLoading(false);
 		}
 	};
 
@@ -437,6 +480,39 @@ export default function Dashboard() {
 								>
 									crash active node
 								</button>
+							</div>
+						</div>
+
+						<div className="neo-card p-5 bg-[#141414]">
+							<h3 className="text-base font-bold text-white flex items-center gap-2 tracking-wide border-b border-zinc-800 pb-3">
+								algorithm
+								<span className="ml-auto text-[10px] px-2 py-0.5 rounded bg-[#fbbf24]/10 border border-[#fbbf24] text-[#fbbf24] font-mono tracking-wider">
+									{activeAlgorithm.replace(/_/g, " ")}
+								</span>
+							</h3>
+							<p className="text-xs text-zinc-500 font-mono mt-2">
+								swap the active rate limiting algorithm on this node in real time
+							</p>
+							<div className="flex flex-col gap-2 mt-4">
+								{ALGORITHMS.map((algo) => (
+									<button
+										key={algo.id}
+										onClick={() => switchAlgorithm(algo.id)}
+										disabled={algorithmLoading}
+										className={`flex items-center justify-between px-3.5 py-3 border-2 rounded-xl transition font-mono text-xs font-bold disabled:opacity-50 ${
+											activeAlgorithm === algo.id
+												? "bg-[#fbbf24]/10 border-[#fbbf24] text-[#fbbf24]"
+												: "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200"
+										}`}
+									>
+										<span>{algo.label}</span>
+										{activeAlgorithm === algo.id && (
+											<span className="text-[10px] px-2 py-0.5 rounded bg-zinc-950 border border-[#fbbf24]">
+												active
+											</span>
+										)}
+									</button>
+								))}
 							</div>
 						</div>
 
