@@ -1,5 +1,5 @@
 # stage 1: build go rate limiter servers
-FROM golang:1.22-alpine AS go-builder
+FROM golang:1.26-alpine AS go-builder
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
