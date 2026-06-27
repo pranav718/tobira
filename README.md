@@ -1,6 +1,6 @@
 # tobira
 
-> **live demo**: [tobira.knightkun.codes](https://tobira.knightkun.codes) (or fallback link: [tobira-production-7217.up.railway.app](https://tobira-production-7217.up.railway.app))
+[tobira.knightkun.codes](https://tobira.knightkun.codes)
 
 tobira is a high-concurrency, redis-less distributed rate limiter cluster. it synchronizes rate limiting states across independent nodes using a decentralized gossip protocol and visualizes cluster metrics, traffic events, and topology in real time.
 
