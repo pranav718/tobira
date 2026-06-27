@@ -19,13 +19,13 @@ interface TerminalLine {
 }
 
 const TERMINAL_SEQUENCE: TerminalLine[] = [
-	{ text: "$ go run cmd/server/main.go -id node-1 -port 8080 -peers localhost:8081,localhost:8082", type: "command" },
-	{ text: "time=2026-06-25T10:11:12.000Z level=INFO msg=\"tobira starting\" node=node-1 port=8080 rate=10 window=60 metrics_reset=10 peers=localhost:8081,localhost:8082", type: "info" },
+	{ text: "$ go run cmd/server/main.go -id node-1 -port 9080 -peers localhost:9081,localhost:9082", type: "command" },
+	{ text: "time=2026-06-25T10:11:12.000Z level=INFO msg=\"tobira starting\" node=node-1 port=9080 rate=10 window=60 metrics_reset=10 peers=localhost:9081,localhost:9082", type: "info" },
 	{ text: "time=2026-06-25T10:11:12.002Z level=INFO msg=\"starting metrics reset loop\" interval_seconds=10", type: "output" },
-	{ text: "time=2026-06-25T10:11:12.005Z level=INFO msg=\"tobira ready\" addr=http://localhost:8080", type: "success" },
-	{ text: "$ go run cmd/load/main.go -targets=http://localhost:8080 -rps=50 -workers=4 -duration=10", type: "command" },
+	{ text: "time=2026-06-25T10:11:12.005Z level=INFO msg=\"tobira ready\" addr=http://localhost:9080", type: "success" },
+	{ text: "$ go run cmd/load/main.go -targets=http://localhost:9080 -rps=50 -workers=4 -duration=10", type: "command" },
 	{ text: "tobira load generator starting...", type: "info" },
-	{ text: "targets:  [http://localhost:8080]", type: "output" },
+	{ text: "targets:  [http://localhost:9080]", type: "output" },
 	{ text: "rps:      50", type: "output" },
 	{ text: "workers:  4", type: "output" },
 	{ text: "time=2026-06-25T10:11:15.010Z level=INFO msg=\"gossip merged state\" from=node-2 merge_count=1", type: "info" },
@@ -40,8 +40,8 @@ const TERMINAL_SEQUENCE: TerminalLine[] = [
 ];
 
 export default function Dashboard() {
-	const [nodePort, setNodePort] = useState("8080");
-	const [inputPort, setInputPort] = useState("8080");
+	const [nodePort, setNodePort] = useState("9080");
+	const [inputPort, setInputPort] = useState("9080");
 	const [gossipMuted, setGossipMuted] = useState(false);
 	const [heartbeatsMuted, setHeartbeatsMuted] = useState(false);
 
@@ -267,7 +267,7 @@ export default function Dashboard() {
 									value={inputPort}
 									onChange={(e) => setInputPort(e.target.value)}
 									className="neo-input w-24 text-center"
-									placeholder="8080"
+									placeholder="9080"
 								/>
 								<button type="submit" className="neo-btn-accent px-4 py-1.5 text-xs font-mono">
 									go

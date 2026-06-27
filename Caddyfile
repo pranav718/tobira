@@ -1,16 +1,16 @@
 # Caddyfile for Railway Single-Port Routing
 :{$PORT} {
-	handle_path /api/proxy/8080* {
-		reverse_proxy localhost:8080
+	handle_path /api/proxy/9080* {
+		reverse_proxy localhost:9080
 	}
-	handle_path /api/proxy/8081* {
-		reverse_proxy localhost:8081
+	handle_path /api/proxy/9081* {
+		reverse_proxy localhost:9081
 	}
-	handle_path /api/proxy/8082* {
-		reverse_proxy localhost:8082
+	handle_path /api/proxy/9082* {
+		reverse_proxy localhost:9082
 	}
-	handle_path /api/proxy/8083* {
-		reverse_proxy localhost:8083
+	handle_path /api/proxy/9083* {
+		reverse_proxy localhost:9083
 	}
 	handle {
 		reverse_proxy localhost:3000
