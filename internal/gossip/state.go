@@ -1,17 +1,39 @@
 package gossip 
 
 import (
+	"strconv"
+	"strings"
 	"sync"
+	"time"
 )
 
 type State struct {
-	mu sync.RWMutex
+	mu   sync.RWMutex
 	Data map[string]map[string]int64 `json:"data"`
 }
 
-func NewState() *State{
-	return &State {
+func NewState() *State {
+	return &State{
 		Data: make(map[string]map[string]int64),
+	}
+}
+
+func (s *State) Cleanup(maxAgeSeconds int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := time.Now().Unix()
+	for key := range s.Data {
+		idx := strings.LastIndex(key, ":")
+		if idx == -1 {
+			continue
+		}
+		suffix := key[idx+1:]
+		timestamp, err := strconv.ParseInt(suffix, 10, 64)
+		if err == nil {
+			if now-timestamp > maxAgeSeconds {
+				delete(s.Data, key)
+			}
+		}
 	}
 }
 

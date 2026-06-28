@@ -66,7 +66,7 @@ func main() {
 
 	gossipNode.Start(ctx)
 
-	lim, err := limiter.New(limiter.Config{
+	lim, err := limiter.NewSwappable(limiter.Config{
 		Algorithm:     *algorithm,
 		Rate:          *rate,
 		WindowSeconds: *window,

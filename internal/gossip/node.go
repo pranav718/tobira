@@ -266,6 +266,7 @@ func (n *Node) startGossipLoop(ctx context.Context) {
 			}
 
 			targetPeer := peers[r.Intn(len(peers))]
+			n.state.Cleanup(120)
 			stateSnapshot := n.state.Copy()
 			payload, err := json.Marshal(stateSnapshot)
 			if err != nil {

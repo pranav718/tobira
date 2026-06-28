@@ -19,7 +19,7 @@ tobira is a high-concurrency, redis-less distributed rate limiter cluster. it sy
 
 - **redis-less distributed sync**: no central database or database bottleneck. nodes communicate directly over udp.
 - **crdt-based state synchronization**: uses a state-based conflict-free replicated data type (crdt) grow-only counter map per rate-limiting key. states merge deterministically across nodes.
-- **pluggable rate limiter algorithms**: 
+- **pluggable rate limiter algorithms with live switching**: choose and hot-swap the active algorithm at runtime from the dashboard. no restart needed.
   - **fixed window**: simple, memory-efficient interval limiters.
   - **token bucket**: supports bursty traffic with continuous token refills.
   - **leaky bucket**: smooths out traffic peaks to maintain constant request output.
@@ -136,6 +136,29 @@ go run cmd/load/main.go -targets=http://localhost:9080/api/resource,http://local
 cd web
 npm install
 npm run dev
+```
+
+---
+
+## admin api
+
+each node exposes a set of runtime admin endpoints for simulation and control:
+
+| endpoint | method | description |
+|---|---|---|
+| `/health` | `GET` | node status, uptime, and **active algorithm** |
+| `/metrics` | `GET` | allowed/denied counts and latency snapshot |
+| `/api/nodes` | `GET` | peer topology as seen by this node |
+| `/api/admin/algorithm?algorithm=<name>` | `POST` | **hot-swap the rate limiting algorithm** without restarting |
+| `/api/admin/gossip?muted=<true\|false>` | `POST` | mute or restore udp gossip state sync |
+| `/api/admin/heartbeat?muted=<true\|false>` | `POST` | mute or restore udp heartbeat pings |
+| `/api/admin/shutdown` | `POST` | gracefully shut down a specific node |
+
+**valid algorithm values:** `fixed_window`, `sliding_window`, `token_bucket`, `leaky_bucket`
+
+example — switch node-1 to token bucket:
+```bash
+curl -X POST "http://localhost:9080/api/admin/algorithm?algorithm=token_bucket"
 ```
 
 ---

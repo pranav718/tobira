@@ -22,6 +22,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/admin/gossip", s.handleAdminGossip)
 	mux.HandleFunc("POST /api/admin/heartbeat", s.handleAdminHeartbeat)
 	mux.HandleFunc("POST /api/admin/shutdown", s.handleAdminShutdown)
+	mux.HandleFunc("POST /api/admin/algorithm", s.handleAdminAlgorithm)
 }
 
 type HealthResponse struct {
@@ -29,6 +30,7 @@ type HealthResponse struct {
 	Node 		string 		`json:"node"`
 	TimeStamp	 string 	`json:"timestamp"`
 	Uptime 		string 		`json:"uptime"`
+	Algorithm string `json:"algorithm"`
 }
 
 var startTime = time.Now()
@@ -41,6 +43,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		Node: s.nodeID, 
 		TimeStamp: time.Now().Format(time.RFC3339),
 		Uptime: time.Since(startTime).Round(time.Second).String(),
+		Algorithm: s.limiter.Algorithm(),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -164,4 +167,28 @@ func (s *Server) handleAdminShutdown(w http.ResponseWriter, r *http.Request) {
 		slog.Warn("admin: executing shutdown")
 		s.Shutdown()
 	}()
+}
+
+func (s *Server) handleAdminAlgorithm(w http.ResponseWriter, r *http.Request) {
+	algorithm := r.URL.Query().Get("algorithm")
+	if algorithm == "" {
+		http.Error(w, "missing 'algorithm' query parameter", http.StatusBadRequest)
+		return
+	}
+
+	if err := s.limiter.Swap(algorithm); err != nil {
+		slog.Error("admin: failed to swap algorithm", "algorithm", algorithm, "err", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	slog.Info("admin: algorithm swapped", "algorithm", algorithm, "node", s.nodeID)
+
+	s.wsHub.Broadcast("algorithm_changed", map[string]interface{}{
+		"algorithm": algorithm,
+		"node":      s.nodeID,
+	})
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(fmt.Sprintf("algorithm set to %s", algorithm)))
 }

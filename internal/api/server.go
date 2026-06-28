@@ -16,14 +16,14 @@ type Server struct {
 	nodeID     string
 	port       string
 	httpServer *http.Server
-	limiter limiter.Limiter
-	metrics  *metrics.Metrics
+	limiter    *limiter.SwappableLimiter
+	metrics    *metrics.Metrics
 	gossipNode *gossip.Node
 	wsHub      *Hub
 }
 
-func NewServer(nodeID, port string, l limiter.Limiter, m *metrics.Metrics, gn *gossip.Node) *Server {
-	s:= &Server{ nodeID: nodeID, port: port, limiter: l, metrics: m, gossipNode: gn}
+func NewServer(nodeID, port string, l *limiter.SwappableLimiter, m *metrics.Metrics, gn *gossip.Node) *Server {
+	s := &Server{nodeID: nodeID, port: port, limiter: l, metrics: m, gossipNode: gn}
 	s.wsHub = NewHub(nodeID, gn, m)
 
 	mux:= http.NewServeMux()

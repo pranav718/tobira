@@ -32,7 +32,7 @@ func TestWebSocketHub(t *testing.T) {
 		Store:         gossipNode.State(),
 		NodeID:        "test-node",
 	}
-	lim, err := limiter.New(cfg)
+	lim, err := limiter.NewSwappable(cfg)
 	if err != nil {
 		t.Fatalf("failed to create limiter: %v", err)
 	}
