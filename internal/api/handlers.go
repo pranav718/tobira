@@ -36,11 +36,15 @@ type HealthResponse struct {
 var startTime = time.Now()
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	if s.gossipNode.IsCrashed() {
+		http.Error(w, "node is currently simulated offline", http.StatusServiceUnavailable)
+		return
+	}
 	slog.Debug("health check", "node", s.nodeID, "remote", r.RemoteAddr)
 
 	resp := HealthResponse{
 		Status: "ok",
-		Node: s.nodeID, 
+		Node: s.nodeID,
 		TimeStamp: time.Now().Format(time.RFC3339),
 		Uptime: time.Since(startTime).Round(time.Second).String(),
 		Algorithm: s.limiter.Algorithm(),
@@ -58,8 +62,12 @@ type LimitResponse struct {
 	Timestamp string `json:"timestamp"`
 }
 
-func (s *Server) handleResource(w http.ResponseWriter, r *http.Request){
-	start:= time.Now()
+func (s *Server) handleResource(w http.ResponseWriter, r *http.Request) {
+	if s.gossipNode.IsCrashed() {
+		http.Error(w, "node is currently simulated offline", http.StatusServiceUnavailable)
+		return
+	}
+	start := time.Now()
 
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
@@ -97,15 +105,23 @@ func (s *Server) handleResource(w http.ResponseWriter, r *http.Request){
 	
 }
 
-func(s *Server) handleMetrics(w http.ResponseWriter, r *http.Request){
-	snapshot:= s.metrics.Snapshot()
+func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	if s.gossipNode.IsCrashed() {
+		http.Error(w, "node is currently simulated offline", http.StatusServiceUnavailable)
+		return
+	}
+	snapshot := s.metrics.Snapshot()
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(snapshot)
 }
 
-func (s *Server) handleNodes(w http.ResponseWriter, r *http.Request){
-	info:= s.gossipNode.Info()
+func (s *Server) handleNodes(w http.ResponseWriter, r *http.Request) {
+	if s.gossipNode.IsCrashed() {
+		http.Error(w, "node is currently simulated offline", http.StatusServiceUnavailable)
+		return
+	}
+	info := s.gossipNode.Info()
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(info)
@@ -158,15 +174,13 @@ func (s *Server) handleAdminHeartbeat(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAdminShutdown(w http.ResponseWriter, r *http.Request) {
-	slog.Warn("admin: triggering node shutdown", "node", s.nodeID)
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("node shutdown initiated"))
+	slog.Warn("admin: triggering software crash simulation", "node", s.nodeID)
+	
+	s.gossipNode.SetCrashed(true, 30*time.Second)
+	s.wsHub.DisconnectAll()
 
-	go func() {
-		time.Sleep(500 * time.Millisecond)
-		slog.Warn("admin: executing shutdown")
-		s.Shutdown()
-	}()
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("node software crash simulated for 30 seconds"))
 }
 
 func (s *Server) handleAdminAlgorithm(w http.ResponseWriter, r *http.Request) {

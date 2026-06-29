@@ -200,7 +200,21 @@ func (h *Hub) Run(ctx context.Context) {
 	}
 }
 
+func (h *Hub) DisconnectAll() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	slog.Warn("websocket: disconnecting all clients due to simulated crash", "node", h.nodeID)
+	for client := range h.clients {
+		client.conn.Close()
+		delete(h.clients, client)
+	}
+}
+
 func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if h.gossipNode.IsCrashed() {
+		http.Error(w, "node is currently simulated offline", http.StatusServiceUnavailable)
+		return
+	}
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		slog.Error("websocket upgrade failed", "err", err)

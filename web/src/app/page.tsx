@@ -200,9 +200,9 @@ export default function Dashboard() {
 	const shutdownNode = () => {
 		setConfirmModal({
 			open: true,
-			title: `Shutdown node on port ${nodePort}?`,
+			title: `Simulate software crash on port ${nodePort}?`,
 			description:
-				"This will gracefully stop the node process. The cluster will detect it as dead within seconds and redistribute state.",
+				"This will simulate a complete network and process crash for 30 seconds. The node will drop offline, stop gossiping, and disconnect from all clients, then automatically recover after 30 seconds.",
 			variant: "danger",
 			onConfirm: async () => {
 				setConfirmModal((prev) => ({ ...prev, open: false }));
@@ -212,12 +212,12 @@ export default function Dashboard() {
 						{ method: "POST" }
 					);
 					if (res.ok) {
-						addToast(`Shutdown command sent to port ${nodePort}`, "success");
+						addToast(`Simulated crash triggered on port ${nodePort} (auto-recovers in 30s)`, "success");
 					} else {
-						addToast("Failed to initiate node shutdown", "error");
+						addToast("Failed to trigger simulated crash", "error");
 					}
 				} catch {
-					addToast("Error sending shutdown command", "error");
+					addToast("Error sending crash simulation command", "error");
 				}
 			},
 		});
@@ -635,7 +635,7 @@ export default function Dashboard() {
 				title={confirmModal.title}
 				description={confirmModal.description}
 				variant={confirmModal.variant}
-				confirmLabel="SHUTDOWN NODE"
+				confirmLabel="SIMULATE CRASH"
 				onConfirm={confirmModal.onConfirm}
 				onCancel={() => setConfirmModal((prev) => ({ ...prev, open: false }))}
 			/>

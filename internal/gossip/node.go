@@ -40,6 +40,8 @@ type Node struct {
 	eventChan chan GossipEvent
 	gossipMuted bool
 	heartbeatsMuted bool
+	crashed         bool
+	crashedUntil    time.Time
 }
 
 func NewNode(id, addr string, peers []string) (*Node,error) {
@@ -63,6 +65,7 @@ func NewNode(id, addr string, peers []string) (*Node,error) {
 		eventChan: make(chan GossipEvent, 100),
 		gossipMuted: false,
 		heartbeatsMuted: false,
+		crashed:         false,
 	}, nil
 }
 
@@ -94,6 +97,44 @@ func (n *Node) State() *State {
 	return n.state
 }
 
+func (n *Node) SetCrashed(crashed bool, duration time.Duration) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.crashed = crashed
+	if crashed && duration > 0 {
+		n.crashedUntil = time.Now().Add(duration)
+		slog.Warn("node: simulated software crash started", "node", n.id, "duration", duration)
+	} else {
+		n.crashedUntil = time.Time{}
+		if crashed {
+			slog.Warn("node: simulated software crash started (permanent until manual recovery)", "node", n.id)
+		} else {
+			slog.Info("node: simulated software crash recovered", "node", n.id)
+		}
+	}
+}
+
+func (n *Node) IsCrashed() bool {
+	n.mu.RLock()
+	if !n.crashed {
+		n.mu.RUnlock()
+		return false
+	}
+	if !n.crashedUntil.IsZero() && time.Now().After(n.crashedUntil) {
+		n.mu.RUnlock()
+		n.mu.Lock()
+		if n.crashed && !n.crashedUntil.IsZero() && time.Now().After(n.crashedUntil) {
+			n.crashed = false
+			n.crashedUntil = time.Time{}
+			slog.Info("node: auto-recovering from simulated software crash", "node", n.id)
+		}
+		n.mu.Unlock()
+		return false
+	}
+	n.mu.RUnlock()
+	return true
+}
+
 func (n *Node) Events() <-chan GossipEvent {
 	return n.eventChan
 }
@@ -119,6 +160,9 @@ func (n *Node) startHeartbeatLoop(ctx context.Context) {
 	for {
 		select {
 		case <-ticker.C:
+			if n.IsCrashed() {
+				continue
+			}
 			if n.IsHeartbeatsMuted() {
 				continue
 			}
@@ -257,6 +301,9 @@ func (n *Node) startGossipLoop(ctx context.Context) {
 	for {
 		select {
 		case <-ticker.C:
+			if n.IsCrashed() {
+				continue
+			}
 			if n.IsGossipMuted() {
 				continue
 			}
@@ -303,6 +350,10 @@ func (n *Node) receiveLoop() {
 				return
 			}
 			slog.Error("failed to read UDP packet", "err", err)
+			continue
+		}
+
+		if n.IsCrashed() {
 			continue
 		}
 
