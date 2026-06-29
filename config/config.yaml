@@ -1,5 +1,5 @@
 # Tobira configuration
 # Algorithm options: fixed_window, sliding_window, token_bucket, leaky_bucket
 algorithm: fixed_window
-rate: 10
-window_seconds: 1
+rate: 100
+window_seconds: 10

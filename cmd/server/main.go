@@ -20,8 +20,8 @@ import (
 func main() {
 	port:= flag.String("port", "8080", "HTTP server port")
 	nodeID:= flag.String("id", "node-1", "unique node identifier")
-	rate := flag.Int("rate", 10 ,"max reqs per window")
-	window:= flag.Int("window", 1, "rate limiter window in seconds")
+	rate := flag.Int("rate", 100 ,"max reqs per window")
+	window:= flag.Int("window", 10, "rate limiter window in seconds")
 	algorithm:= flag.String("algorithm","fixed_window","rate limit algorithm: fixed_window, sliding_window, token_bucket, leaky_bucket")
 	metricsReset := flag.Int("metrics-reset", 10, "metrics reset interval in seconds( 0 to disable)")
 	peers := flag.String("peers", "", "comma-separated list of peer addresses (e.g. localhost:8081,localhost:8082)")
